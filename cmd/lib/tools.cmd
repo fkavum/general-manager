@@ -81,7 +81,12 @@ call set "WAIT_%_w%_PORT=%%WAIT_%_w%_DEFAULT%%"
 exit /b 0
 
 rem === gm_service: service name=… docker=… [project=…] container=… port=… ====
-rem                 [ports=a,b] [profile=local] [optional=1] [env=…|-] [waits=a,b]
+rem                 [ports=a,b] [kind=dotnet^|flutter-web] [profile=local]
+rem                 [optional=1] [env=…|-] [waits=a,b]
+rem kind= is what manual mode runs from project=: dotnet (default) is
+rem 'dotnet run --launch-profile <profile>', flutter-web is 'flutter run -d
+rem <device> --web-port=<port> --dart-define-from-file=Resources\Configs\
+rem appsettings.<profile>.json'. Docker mode is compose for every kind.
 :service
 shift
 set /a SVC_COUNT+=1
@@ -92,6 +97,7 @@ set "SVC_%_s%_PROJECT=-"
 set "SVC_%_s%_CONTAINER="
 set "SVC_%_s%_PORT="
 set "SVC_%_s%_PORTS="
+set "SVC_%_s%_KIND=dotnet"
 set "SVC_%_s%_PROFILE=local"
 set "SVC_%_s%_OPTIONAL=0"
 set "SVC_%_s%_ENV="

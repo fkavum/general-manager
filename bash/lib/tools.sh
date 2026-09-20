@@ -131,6 +131,10 @@ gm_check_dotnet() {
   command -v dotnet >/dev/null 2>&1 || gm_die "dotnet is not on PATH (the backends target net8.0)"
 }
 
+gm_check_flutter() {
+  command -v flutter >/dev/null 2>&1 || gm_die "flutter is not on PATH (the clients are Flutter web PWAs)"
+}
+
 # Networks marked 'external' in an app compose file: on a server Dokploy (or the
 # infra stack) creates them, on a laptop nobody does. Networks the infra compose
 # declares itself are left alone, so compose keeps ownership of their labels.
@@ -217,7 +221,7 @@ gm_kill_port_holders() { # <port>…
 # actually has. Indexed arrays only - macOS still ships bash 3.2, which has no
 # associative arrays.
 SVC_NAMES=(); SVC_DOCKER=(); SVC_PROJECT=(); SVC_CONTAINER=()
-SVC_PORT=(); SVC_PORTS=(); SVC_PROFILE=(); SVC_OPTIONAL=(); SVC_ENV=(); SVC_WAITS=()
+SVC_PORT=(); SVC_PORTS=(); SVC_PROFILE=(); SVC_OPTIONAL=(); SVC_ENV=(); SVC_WAITS=(); SVC_KIND=()
 WAIT_NAMES=(); WAIT_KEYS=(); WAIT_DEFAULTS=(); WAIT_PORTS=()
 
 # collapse ../.. in a declared path when it exists, so messages and pane scripts
@@ -257,19 +261,27 @@ gm_wait() {
 }
 
 # gm_service name=… docker=… [project=…] container=… port=… [ports=a,b]
-#            [profile=local] [optional=1] [env=.env.local|-] [waits=a,b]
+#            [kind=dotnet|flutter-web] [profile=local] [optional=1]
+#            [env=.env.local|-] [waits=a,b]
 #   project=   omitted (or "-") means the service has no local build: it runs
 #              from docker in both modes.
+#   kind=      what manual mode runs from project=:
+#                dotnet       (default)  dotnet run --launch-profile <profile>
+#                flutter-web  flutter run -d <device> --web-port=<port>
+#                             --dart-define-from-file=Resources/Configs/appsettings.<profile>.json
+#              In docker mode every kind is 'docker compose up' in docker=.
+#   profile=   the environment name: a launchSettings profile for dotnet, an
+#              appsettings.<profile>.json for flutter-web.
 #   ports=     every port the service binds; port= is the primary one.
 #   env=       compose env file for this stack; "-" means it has none.
 #   waits=     gm_wait names and/or other service names to come up first.
 gm_service() {
   local a k v
-  local name="" docker="" project="-" container="" port="" ports="" profile=local optional=0 env="" waits=""
+  local name="" docker="" project="-" container="" port="" ports="" profile=local optional=0 env="" waits="" kind=dotnet
   for a in "$@"; do
     k="${a%%=*}"; v="${a#*=}"
     case "$k" in
-      name|docker|project|container|port|ports|profile|optional|env|waits) eval "$k=\$v" ;;
+      name|docker|project|container|port|ports|profile|optional|env|waits|kind) eval "$k=\$v" ;;
       *) gm_die "gm_service: unknown key '$k'" ;;
     esac
   done
@@ -277,11 +289,17 @@ gm_service() {
   [ -n "$docker" ] || gm_die "gm_service $name: docker= is required"
   [ -n "$ports" ]  || ports="$port"
   [ -n "$port" ]   || port="${ports%%,*}"
+  case "$kind" in dotnet|flutter-web) ;; *) gm_die "gm_service $name: kind must be dotnet or flutter-web (got '$kind')" ;; esac
 
   SVC_NAMES+=("$name"); SVC_DOCKER+=("$(_gm_abs "$docker")")
   if [ "$project" = "-" ] || [ -z "$project" ]; then SVC_PROJECT+=("-"); else SVC_PROJECT+=("$(_gm_abs "$project")"); fi
   SVC_CONTAINER+=("$container"); SVC_PORT+=("$port"); SVC_PORTS+=("$ports")
-  SVC_PROFILE+=("$profile"); SVC_OPTIONAL+=("$optional"); SVC_ENV+=("$env"); SVC_WAITS+=("$waits")
+  SVC_PROFILE+=("$profile"); SVC_OPTIONAL+=("$optional"); SVC_ENV+=("$env"); SVC_WAITS+=("$waits"); SVC_KIND+=("$kind")
+}
+
+# the env file a flutter-web service compiles in, relative to its project dir
+gm_flutter_config() { # <profile>
+  printf 'Resources/Configs/appsettings.%s.json' "$1"
 }
 
 # Resolve every gm_wait target's port from the infra env file (once, after the

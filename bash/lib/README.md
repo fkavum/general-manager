@@ -43,20 +43,37 @@ declares the infra stack and the services, and nothing else:
 ```bash
 PROJECT=flash
 WEB_REPO="${FLASH_WEB_REPO:-$MANAGER_DIR/../flash-web}"
+CLIENT_REPO="${FLASH_CLIENT_REPO:-$MANAGER_DIR/../client}"
 INFRA_REPO="${DCM_DOCKER_REPO:-$MANAGER_DIR/../../dcm-docker}"
 
-gm_infra "$INFRA_REPO/common-infra" "mysql" MYSQL_PORT 20010
+gm_infra dir="$INFRA_REPO/common-infra" label="shared mysql"
+gm_wait  mysql key=MYSQL_PORT default=20010
 
-#          name  docker-dir              project-dir (- = docker only)  container            port  profile [opt] [env-file]
-gm_service web   "$WEB_REPO/Docker/Main" "$WEB_REPO/Src/Main"           flash-web-container  20300 local
+gm_service name=web container=flash-web-container port=20300 waits=mysql \
+           docker="$WEB_REPO/Docker/Main" project="$WEB_REPO/Src/Main"
+gm_service name=client kind=flutter-web container=flash-client port=20321 waits=web \
+           docker="$CLIENT_REPO/Docker" project="$CLIENT_REPO"
 ```
 
 * `MANAGER_DIR` is set for you, so paths stay relative to the checkout.
   Each repo location can be overridden with the env var shown in the `${…:-…}`.
-* `project-dir` of `-` means the service has no local build and runs from Docker
-  in both modes.
-* 7th field `1` makes a service **opt-in**, reached with `--with=<name>`.
-* 8th field names a per-service compose env file; `-` means the stack has none.
+* `project=` omitted (or `-`) means the service has no local build and runs from
+  Docker in both modes.
+* `kind=` is what manual mode runs from `project=`. `dotnet` (the default) is
+  `dotnet run --launch-profile <profile>`; `flutter-web` is
+  `flutter run -d <device> --web-port=<port>
+  --dart-define-from-file=Resources/Configs/appsettings.<profile>.json`, i.e. the
+  same command the client's own `tool/run.dart` issues. The device is `chrome`
+  unless `--device=` (or `GM_WEB_DEVICE`) says otherwise; `web-server` serves on
+  the port without opening a browser. Docker mode is `docker compose up` for
+  every kind, so a client's `Docker/` folder needs a compose file that publishes
+  the registry port and an `.env.local` naming the `APP_ENV` to bake in.
+* `profile=` is the environment name in both kinds: a launchSettings profile for
+  dotnet, an `appsettings.<profile>.json` for flutter-web (default `local`).
+* `optional=1` makes a service **opt-in**, reached with `--with=<name>`.
+* `env=` names a per-service compose env file; `-` means the stack has none.
+* `waits=` lists `gm_wait` names and/or other services that must accept
+  connections before this pane starts — a client waits for its API.
 
 Wrappers pass two paths: `GM_TOOLS_DIR` (the runner folder — it owns `.run/`,
 `project.sh` and `logs.conf`) and `GM_MANAGER_DIR` (the `<project>-manager` that

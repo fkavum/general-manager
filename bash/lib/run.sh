@@ -15,6 +15,7 @@ WATCH=0
 WITH=""
 APP_ENV=".env.local"
 INFRA_ENV_OVERRIDE=""
+WEB_DEVICE="${GM_WEB_DEVICE:-chrome}"
 for arg in "$@"; do
   gm_parse_common_arg "$arg" && continue
   case "$arg" in
@@ -24,6 +25,7 @@ for arg in "$@"; do
     --with=*)      WITH="$WITH $(printf '%s' "${arg#*=}" | tr ',' ' ')" ;;
     --infra-env=*) INFRA_ENV_OVERRIDE="${arg#*=}" ;;
     --app-env=*)   APP_ENV="${arg#*=}" ;;
+    --device=*)    WEB_DEVICE="${arg#*=}" ;;
     -h|--help)
       cat <<USAGE
 usage: run-$MODE.sh [options]
@@ -40,7 +42,10 @@ options:
   --app-env=F       env file the app stacks use (default .env.local)
 $( [ "$MODE" = docker ] \
      && echo "  --no-build        skip 'docker compose --build'" \
-     || echo "  --watch           use 'dotnet watch' instead of 'dotnet run'" )
+     || printf '%s\n%s\n%s' \
+          "  --watch           use 'dotnet watch' instead of 'dotnet run' (dotnet services)" \
+          "  --device=X        flutter device for the web clients (default chrome;" \
+          "                    web-server serves on the port without opening a browser)" )
   --terminal=X      auto (default) | wezterm | tmux | os | none
   --wezterm | --tmux | --no-terminal
   --dry-run         print what each pane would run, launch nothing
@@ -72,17 +77,29 @@ done
 [ "${#PICKED[@]}" -gt 0 ] || gm_die "no services selected"
 
 gm_check_docker
-if [ "$MODE" = manual ]; then gm_check_dotnet; fi
 
+# manual mode needs the SDK of every kind it is about to run from source
 CHECK=()
+NEED_DOTNET=0; NEED_FLUTTER=0
 for i in "${PICKED[@]}"; do
   if [ "$MODE" = docker ] || [ "${SVC_PROJECT[$i]}" = "-" ]; then
     gm_check_paths "${SVC_DOCKER[$i]}"
   else
     gm_check_paths "${SVC_PROJECT[$i]}"
     for p in $(printf '%s' "${SVC_PORTS[$i]}" | tr ',' ' '); do CHECK+=("$p"); done
+    case "${SVC_KIND[$i]}" in
+      flutter-web)
+        NEED_FLUTTER=1
+        cfg="$(gm_flutter_config "${SVC_PROFILE[$i]}")"
+        [ -f "${SVC_PROJECT[$i]}/$cfg" ] || gm_die "service ${SVC_NAMES[$i]}: no $cfg in ${SVC_PROJECT[$i]}
+  A flutter-web service compiles that file in (profile=${SVC_PROFILE[$i]} in tools/project.sh)."
+        ;;
+      *) NEED_DOTNET=1 ;;
+    esac
   fi
 done
+if [ "$NEED_DOTNET" = 1 ];  then gm_check_dotnet;  fi
+if [ "$NEED_FLUTTER" = 1 ]; then gm_check_flutter; fi
 if [ "$WITH_INFRA" = 1 ]; then gm_check_paths "$INFRA_DIR"; fi
 
 if [ "${GM_DRY_RUN:-0}" != 1 ]; then
@@ -140,6 +157,12 @@ for i in "${PICKED[@]}"; do
     body="cd $(gm_sq "${SVC_DOCKER[$i]}")
 docker compose $env_arg up $BUILD"
     title="$name · :${SVC_PORTS[$i]} (docker)"
+  elif [ "${SVC_KIND[$i]}" = flutter-web ]; then
+    # the dev server binds the declared port; the API URL comes from the env file
+    # it compiles in, exactly like the Docker image does with APP_ENV
+    body="cd $(gm_sq "${SVC_PROJECT[$i]}")
+flutter run -d $WEB_DEVICE --web-port=${SVC_PORT[$i]} --dart-define-from-file=$(gm_flutter_config "${SVC_PROFILE[$i]}")"
+    title="$name · :${SVC_PORTS[$i]} (flutter ${SVC_PROFILE[$i]} · $WEB_DEVICE)"
   else
     body="cd $(gm_sq "${SVC_PROJECT[$i]}")
 $DOTNET_CMD --launch-profile ${SVC_PROFILE[$i]}"

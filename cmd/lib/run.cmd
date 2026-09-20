@@ -19,6 +19,8 @@ set "WITH= "
 set "APP_ENV=.env.local"
 set "INFRA_ENV_OVERRIDE="
 set "DRY=0"
+if not defined GM_WEB_DEVICE set "GM_WEB_DEVICE=chrome"
+set "WEB_DEVICE=%GM_WEB_DEVICE%"
 
 :args
 if "%~1"=="" goto :argsdone
@@ -31,6 +33,7 @@ if /i "%A%"=="--wezterm"     (set "GM_TERMINAL=wezterm" & shift & goto :args)
 if /i "%A%"=="--wt"          (set "GM_TERMINAL=wt"    & shift & goto :args)
 if /i "%A%"=="--no-terminal" (set "GM_TERMINAL=none"  & shift & goto :args)
 if /i "%A:~0,7%"=="--with="       (set "WITH=%WITH%%A:~7% "        & shift & goto :args)
+if /i "%A:~0,9%"=="--device="     (set "WEB_DEVICE=%A:~9%"         & shift & goto :args)
 if /i "%A:~0,11%"=="--terminal="  (set "GM_TERMINAL=%A:~11%"       & shift & goto :args)
 if /i "%A:~0,12%"=="--infra-env=" (set "INFRA_ENV_OVERRIDE=%A:~12%" & shift & goto :args)
 if /i "%A:~0,10%"=="--app-env="   (set "APP_ENV=%A:~10%"           & shift & goto :args)
@@ -50,7 +53,9 @@ echo   --with=a,b        also start these optional services
 echo   --infra-env=F     infra env file ^(default .env.win^)
 echo   --app-env=F       env file the app stacks use ^(default .env.local^)
 echo   --no-build        skip 'docker compose --build'   ^(docker mode^)
-echo   --watch           dotnet watch instead of dotnet run   ^(manual mode^)
+echo   --watch           dotnet watch instead of dotnet run   ^(manual mode, dotnet services^)
+echo   --device=X        flutter device for the web clients   ^(manual mode, default chrome;
+echo                     web-server serves on the port without opening a browser^)
 echo   --terminal=X      auto ^| wezterm ^| wt ^| os ^| none
 echo   --dry-run         print what each pane would run, launch nothing
 exit /b 0
@@ -66,13 +71,12 @@ call "%GM_LIB%\tools.cmd" resolvew "%INFRA_DIR%\%INFRA_ENV_FILE%"
 
 where docker >nul 2>&1 || (echo error: docker is not on PATH 1>&2 & exit /b 1)
 docker info >nul 2>&1 || (echo error: docker daemon is not running 1>&2 & exit /b 1)
-if /i not "%MODE%"=="manual" goto :dotnetok
-where dotnet >nul 2>&1 || (echo error: dotnet is not on PATH 1>&2 & exit /b 1)
-:dotnetok
 
 rem --- which services, and the preflight each mode needs ---------------------
 set "PICKED= "
 set "CHECKPORTS="
+set "NEED_DOTNET=0"
+set "NEED_FLUTTER=0"
 set "N=0"
 :pick
 set /a N+=1
@@ -87,16 +91,28 @@ if errorlevel 1 goto :pick
 set "PICKED=%PICKED%%N% "
 call set "_prj=%%SVC_%N%_PROJECT%%"
 call set "_dkr=%%SVC_%N%_DOCKER%%"
+call set "_knd=%%SVC_%N%_KIND%%"
+call set "_prf=%%SVC_%N%_PROFILE%%"
 if /i "%MODE%"=="docker" goto :pickdocker
 if "%_prj%"=="-"         goto :pickdocker
 call "%GM_LIB%\tools.cmd" checkdir "%_prj%" || exit /b 1
 call set "CHECKPORTS=%%CHECKPORTS%% %%SVC_%N%_PORTS:,= %%"
+if /i not "%_knd%"=="flutter-web" (set "NEED_DOTNET=1" & goto :pick)
+set "NEED_FLUTTER=1"
+rem a flutter-web service compiles this file in; say so now, not from a pane
+if not exist "%_prj%\Resources\Configs\appsettings.%_prf%.json" (
+  echo error: service %_nm%: no Resources\Configs\appsettings.%_prf%.json in %_prj% 1>&2
+  exit /b 1
+)
 goto :pick
 :pickdocker
 call "%GM_LIB%\tools.cmd" checkdir "%_dkr%" || exit /b 1
 goto :pick
 :picked
 if "%PICKED%"=="  " (echo no services selected 1>&2 & exit /b 1)
+rem manual mode needs the SDK of every kind it is about to run from source
+if "%NEED_DOTNET%"=="1"  where dotnet  >nul 2>&1 || (echo error: dotnet is not on PATH 1>&2 & exit /b 1)
+if "%NEED_FLUTTER%"=="1" where flutter >nul 2>&1 || (echo error: flutter is not on PATH 1>&2 & exit /b 1)
 if not "%WITH_INFRA%"=="1" goto :infradirok
 call "%GM_LIB%\tools.cmd" checkdir "%INFRA_DIR%" || exit /b 1
 :infradirok
@@ -163,9 +179,11 @@ goto :launch
 :service_pane
 set "I=%~1"
 call set "SNAME=%%SVC_%I%_NAME%%"
+call set "SPORT=%%SVC_%I%_PORT%%"
 call set "SPORTS=%%SVC_%I%_PORTS%%"
 call set "SPROJ=%%SVC_%I%_PROJECT%%"
 call set "SDOCK=%%SVC_%I%_DOCKER%%"
+call set "SKIND=%%SVC_%I%_KIND%%"
 call set "SPROF=%%SVC_%I%_PROFILE%%"
 call set "SENV=%%SVC_%I%_ENV%%"
 call set "SWAITS=%%SVC_%I%_WAITS%%"
@@ -174,14 +192,22 @@ if not defined SENV set "SENV=%APP_ENV%"
 set "MODESTR=docker"
 set "ISDOCKER=1"
 if /i not "%MODE%"=="docker" if not "%SPROJ%"=="-" (set "ISDOCKER=0" & set "MODESTR=--env=%SPROF%")
+if "%ISDOCKER%"=="0" if /i "%SKIND%"=="flutter-web" set "MODESTR=flutter %SPROF% - %WEB_DEVICE%"
 call :panestart "%SNAME%" "%SNAME% - :%SPORTS% (%MODESTR%)"
 
 rem each service waits only for what it declared, so all panes can start at once
 for %%d in (%SWAITS:,= %) do call :waitline "%%d"
 
 if "%ISDOCKER%"=="1" goto :pane_docker
+if /i "%SKIND%"=="flutter-web" goto :pane_flutter
 >>"%PANE%" echo cd /d "%SPROJ%"
 >>"%PANE%" echo %DOTNET_CMD% --launch-profile %SPROF%
+goto :pane_tail
+:pane_flutter
+rem the dev server binds the declared port; the API URL comes from the env file
+rem it compiles in, exactly like the Docker image does with APP_ENV
+>>"%PANE%" echo cd /d "%SPROJ%"
+>>"%PANE%" echo flutter run -d %WEB_DEVICE% --web-port=%SPORT% --dart-define-from-file=Resources/Configs/appsettings.%SPROF%.json
 goto :pane_tail
 :pane_docker
 >>"%PANE%" echo cd /d "%SDOCK%"

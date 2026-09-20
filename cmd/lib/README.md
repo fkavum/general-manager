@@ -27,8 +27,11 @@ call "%GM_LIB%\tools.cmd" service name=web container=flash-web-container port=20
 ```
 
 Keys are identical to the bash side (`name= docker= project= container= port=
-ports= profile= optional= env= waits=`), so the two `project.*` files stay
+ports= kind= profile= optional= env= waits=`), so the two `project.*` files stay
 readable side by side. **Keep them in step** — nothing enforces it.
+`kind=flutter-web` runs `flutter run -d <device> --web-port=<port>
+--dart-define-from-file=Resources/Configs/appsettings.<profile>.json` in manual
+mode (`flutter.bat` from PATH; `--device=` picks the device, default `chrome`).
 
 The wrapper passes `GM_TOOLS_DIR` (the runner folder) and `GM_MANAGER_DIR` (the
 `<project>-manager` above `tools/`), which is how shared code finds the right
