@@ -16,7 +16,11 @@ set "BUILD=--build"
 set "WITH_INFRA=1"
 set "WATCH=0"
 set "WITH= "
-set "APP_ENV=.env.local"
+rem Namespaced on purpose: env.cmd is loaded by every pane, and docker compose
+rem resolves %VAR% from the process environment BEFORE --env-file. A bare APP_ENV
+rem here would shadow the APP_ENV a stack's own .env.local sets (the client image
+rem bakes appsettings.<APP_ENV>.json in).
+set "GM_APP_ENV=.env.local"
 set "INFRA_ENV_OVERRIDE="
 set "DRY=0"
 if not defined GM_WEB_DEVICE set "GM_WEB_DEVICE=chrome"
@@ -36,7 +40,7 @@ if /i "%A:~0,7%"=="--with="       (set "WITH=%WITH%%A:~7% "        & shift & got
 if /i "%A:~0,9%"=="--device="     (set "WEB_DEVICE=%A:~9%"         & shift & goto :args)
 if /i "%A:~0,11%"=="--terminal="  (set "GM_TERMINAL=%A:~11%"       & shift & goto :args)
 if /i "%A:~0,12%"=="--infra-env=" (set "INFRA_ENV_OVERRIDE=%A:~12%" & shift & goto :args)
-if /i "%A:~0,10%"=="--app-env="   (set "APP_ENV=%A:~10%"           & shift & goto :args)
+if /i "%A:~0,10%"=="--app-env="   (set "GM_APP_ENV=%A:~10%"        & shift & goto :args)
 if /i "%A%"=="-h"     goto :usage
 if /i "%A%"=="--help" goto :usage
 echo unknown option: %A% 1>&2
@@ -146,7 +150,7 @@ set "ENV_CMD=%RUN_DIR%\env.cmd"
 >>"%ENV_CMD%" echo set "PROJECT=%PROJECT%"
 >>"%ENV_CMD%" echo set "INFRA_DIR=%INFRA_DIR%"
 >>"%ENV_CMD%" echo set "INFRA_ENV_FILE=%INFRA_ENV_FILE%"
->>"%ENV_CMD%" echo set "APP_ENV=%APP_ENV%"
+>>"%ENV_CMD%" echo set "GM_APP_ENV=%GM_APP_ENV%"
 
 rem --- panes -----------------------------------------------------------------
 rem No -p anywhere: each stack keeps the project name compose derives from its
@@ -187,7 +191,7 @@ call set "SKIND=%%SVC_%I%_KIND%%"
 call set "SPROF=%%SVC_%I%_PROFILE%%"
 call set "SENV=%%SVC_%I%_ENV%%"
 call set "SWAITS=%%SVC_%I%_WAITS%%"
-if not defined SENV set "SENV=%APP_ENV%"
+if not defined SENV set "SENV=%GM_APP_ENV%"
 
 set "MODESTR=docker"
 set "ISDOCKER=1"

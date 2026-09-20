@@ -9,7 +9,7 @@ gm_init
 STOP_INFRA=0    # the infra is shared between projects; never taken down by default
 KILL_PORTS=1    # also clear leftovers from a forgotten run-manual.sh
 VOLUMES=""
-APP_ENV=".env.local"
+GM_APP_ENV=".env.local"   # namespaced like run.sh: never shadow a stack's own APP_ENV
 INFRA_ENV_OVERRIDE=""
 WITH=""
 for arg in "$@"; do
@@ -19,7 +19,7 @@ for arg in "$@"; do
     --keep-ports)  KILL_PORTS=0 ;;
     --volumes)     VOLUMES="--volumes" ;;
     --with=*)      WITH="$WITH $(printf '%s' "${arg#*=}" | tr ',' ' ')" ;;
-    --app-env=*)   APP_ENV="${arg#*=}" ;;
+    --app-env=*)   GM_APP_ENV="${arg#*=}" ;;
     --infra-env=*) INFRA_ENV_OVERRIDE="${arg#*=}" ;;
     -h|--help)
       cat <<'USAGE'
@@ -59,7 +59,7 @@ for ((i=${#SVC_NAMES[@]}-1; i>=0; i--)); do
   if [ "${SVC_OPTIONAL[$i]}" = 1 ]; then
     case " $WITH " in *" ${SVC_NAMES[$i]} "*) ;; *) continue ;; esac
   fi
-  down "${SVC_NAMES[$i]}" "${SVC_DOCKER[$i]}" --env-file "$APP_ENV"
+  down "${SVC_NAMES[$i]}" "${SVC_DOCKER[$i]}" --env-file "$GM_APP_ENV"
 done
 
 if [ "$STOP_INFRA" = 1 ]; then

@@ -94,6 +94,11 @@ GM_TOOLS_DIR="$here" GM_MANAGER_DIR="$manager" \
   registry value from `PORTS.md` as the fallback — the same `${VAR:-default}`
   the compose files carry. Nothing from those files is exported into a pane,
   because a shell variable silently outranks `--env-file`.
+* **The launcher's own variables are `GM_`-prefixed** for that same reason:
+  `.run/env.sh` is sourced by every pane, so a bare name like `APP_ENV` would
+  reach `docker compose` and win over the stack's `.env.local` (it did — it
+  baked `appsettings..env.local.json` into a client image). The env-file
+  selector is `GM_APP_ENV`; the flag stays `--app-env=`.
 * **No `-p`**: every stack keeps the compose project name derived from its own
   folder, so the panes drive the same containers as running compose by hand.
 * **`stop.sh` clears leftover local processes** after the stacks are down:

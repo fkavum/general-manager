@@ -9,7 +9,9 @@ if "%GM_LIB:~-1%"=="\" set "GM_LIB=%GM_LIB:~0,-1%"
 set "STOP_INFRA=0"
 set "KILL_PORTS=1"
 set "VOLUMES="
-set "APP_ENV=.env.local"
+rem namespaced like run.cmd: the launcher never exports a bare APP_ENV,
+rem which docker compose would resolve before a stack's own --env-file.
+set "GM_APP_ENV=.env.local"
 set "INFRA_ENV_OVERRIDE="
 set "WITH= "
 :args
@@ -20,7 +22,7 @@ if /i "%A%"=="--keep-infra" (set "STOP_INFRA=0" & shift & goto :args)
 if /i "%A%"=="--keep-ports" (set "KILL_PORTS=0" & shift & goto :args)
 if /i "%A%"=="--volumes"    (set "VOLUMES=--volumes" & shift & goto :args)
 if /i "%A:~0,7%"=="--with="       (set "WITH=%WITH%%A:~7% "         & shift & goto :args)
-if /i "%A:~0,10%"=="--app-env="   (set "APP_ENV=%A:~10%"            & shift & goto :args)
+if /i "%A:~0,10%"=="--app-env="   (set "GM_APP_ENV=%A:~10%"            & shift & goto :args)
 if /i "%A:~0,12%"=="--infra-env=" (set "INFRA_ENV_OVERRIDE=%A:~12%" & shift & goto :args)
 if /i "%A%"=="-h"     goto :usage
 if /i "%A%"=="--help" goto :usage
@@ -55,7 +57,7 @@ if errorlevel 1 goto :next
 :takeit
 call set "_dkr=%%SVC_%N%_DOCKER%%"
 call set "_env=%%SVC_%N%_ENV%%"
-if not defined _env set "_env=%APP_ENV%"
+if not defined _env set "_env=%GM_APP_ENV%"
 call :down "%_nm%" "%_dkr%" "%_env%"
 :next
 set /a N-=1
