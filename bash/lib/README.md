@@ -32,6 +32,7 @@ for the side-by-side comparison in `dcm-manager/tools_v2/README.md`.)
 | `stop.sh` | `docker compose down` for each declared stack |
 | `logs.sh` | one pane per service, following its logs |
 | `test-panes.sh` | launches dummy panes to check the terminal plumbing |
+| `test-generate.sh` | golden test over what the launcher *generates* (`testdata/golden/`) |
 | `waitport.sh` | blocks until a TCP port accepts, used between panes |
 | `tailer.sh` | resolves a `%DATE%` glob, waits for it, then `tail -F` |
 
@@ -86,6 +87,41 @@ manager="$(cd "$here/../../.." && pwd)"        # …/tools/bash/runner -> …-ma
 GM_TOOLS_DIR="$here" GM_MANAGER_DIR="$manager" \
   exec "$manager/../../general-manager/bash/lib/run.sh" docker "$@"
 ```
+
+## Tests
+
+Two, and they cover different halves:
+
+| | what it proves | needs |
+|---|---|---|
+| `test-panes.sh` (a project's `tools/bash/runner/test.sh`) | panes really open and run, in whichever terminal | a terminal |
+| `test-generate.sh` | what is *written into* those panes is what we expect | nothing |
+
+```bash
+general-manager/bash/lib/test-generate.sh            # check
+general-manager/bash/lib/test-generate.sh --update   # accept a change, then read the diff
+```
+
+It runs the real `run.sh --dry-run` against a throwaway fixture project — stub
+`docker`/`dotnet`/`flutter` on `PATH`, everything inside a temp dir — for three
+cases (`docker`, `manual`, and `docker --with= --app-env= --no-build`), then
+diffs `.run/env.sh` and every generated pane script against
+`testdata/golden/*.txt`. Absolute paths, `$PATH` and `GM_OS` are flattened; the
+rest is pinned byte for byte, so a changed `docker compose` line or a new export
+shows up as a diff.
+
+It also enforces the `env.sh` export contract directly: every exported name must
+be `GM_`-prefixed or one of the reviewed legacy names. That check is the
+`APP_ENV` bug written down as a test — it fails with the reason, not just a
+diff.
+
+**Run it after every change to `run.sh`/`tools.sh`.** A diff is not a failure by
+itself; it is the change you made, shown to you. Re-run with `--update` and keep
+the golden diff with the change.
+
+Not covered: `stop.sh` (no dry run) and the whole of `../../cmd/lib`, which is
+the same logic hand-mirrored in batch — `run.cmd` has a `--dry-run` too, so the
+same test can be written there, from Windows.
 
 ## Conventions this code follows
 
