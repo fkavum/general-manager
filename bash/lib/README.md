@@ -119,9 +119,9 @@ diff.
 itself; it is the change you made, shown to you. Re-run with `--update` and keep
 the golden diff with the change.
 
-Not covered: `stop.sh` (no dry run) and the whole of `../../cmd/lib`, which is
-the same logic hand-mirrored in batch — `run.cmd` has a `--dry-run` too, so the
-same test can be written there, from Windows.
+Not covered: `stop.sh`, which has no dry run. The Windows half has the same
+test — `../../cmd/lib/test-generate.cmd`, own fixture, own goldens — but it can
+only be run, and its goldens only produced, on Windows.
 
 ## Conventions this code follows
 
