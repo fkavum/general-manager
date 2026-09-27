@@ -1,0 +1,5 @@
+# Flutter clients that use the shared icon pipeline.
+# <app>  <client root, relative to /Users/fkavum/Documents/project>
+# The app name is also its artwork folder here: docs/app-icons/<app>/source.png
+hunter   testapp/client
+flash    flash/client

@@ -59,7 +59,13 @@ for ((i=${#SVC_NAMES[@]}-1; i>=0; i--)); do
   if [ "${SVC_OPTIONAL[$i]}" = 1 ]; then
     case " $WITH " in *" ${SVC_NAMES[$i]} "*) ;; *) continue ;; esac
   fi
-  down "${SVC_NAMES[$i]}" "${SVC_DOCKER[$i]}" --env-file "$GM_APP_ENV"
+  # same env resolution as run.sh: per-service env=, "-" means the stack has none
+  svc_env="${SVC_ENV[$i]:-$GM_APP_ENV}"
+  if [ "$svc_env" = "-" ]; then
+    down "${SVC_NAMES[$i]}" "${SVC_DOCKER[$i]}"
+  else
+    down "${SVC_NAMES[$i]}" "${SVC_DOCKER[$i]}" --env-file "$svc_env"
+  fi
 done
 
 if [ "$STOP_INFRA" = 1 ]; then
