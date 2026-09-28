@@ -148,6 +148,12 @@ plumbing, a shared `AppColors` **shape** (not values) so `check_theme.sh` can be
 | D8 | Adoption order | Flash → Hunter → Tapit (smallest first, the one with the most code second while the package API is still soft, web-only last). |
 | D9 | Prefs keys | Keep today's per-app keys (`flash_*`, `dcm_*`) via the `AuthSession(prefix)` so no user is logged out by the migration. |
 
+**D1 amended 2026-09-27 (implementation):** the clients are three GitHub repos built by Dokploy from their own
+checkout, so flash and tapit cannot `path:` into testapp. Hunter keeps `path: ../packages/…` (Docker context = repo
+root); flash and tapit carry a byte-identical vendored copy in `<client>/packages/`, pulled by their own `tool/sync-flutter-core.sh
+[--check]` (like `Tools/sync-dcm-features.sh`).
+Details in `session_progress.md`.
+
 ## 7. Risks
 
 - **H's endpoint prefix change (D2)** touches every H domain service; mitigated by the analyzer (every call goes

@@ -64,7 +64,8 @@ gm_service name=client kind=flutter-web container=flash-client port=20321 waits=
   `dotnet run --launch-profile <profile>`; `flutter-web` is
   `flutter run -d <device> --web-port=<port>
   --dart-define-from-file=Resources/Configs/appsettings.<profile>.json`, i.e. the
-  same command the client's own `tool/run.dart` issues. The device is `chrome`
+  same command `dart run dcx_flutter_core:run <profile> <device>` issues from the
+  client folder (the shared Flutter package's launcher, flutter-core 2026-09-27). The device is `chrome`
   unless `--device=` (or `GM_WEB_DEVICE`) says otherwise; `web-server` serves on
   the port without opening a browser. Docker mode is `docker compose up` for
   every kind, so a client's `Docker/` folder needs a compose file that publishes

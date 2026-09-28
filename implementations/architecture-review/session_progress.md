@@ -13,7 +13,7 @@ Move to `implementation-done/` when every accepted item is ✅ or explicitly rej
 | 6 | Close or park `implementations/port-scheme/` (Dokploy ports, VPS redeploy, `dcm-docker` branch) (§3.2) | 🔲 | 🔲 |
 | 7 | Intros ≤ 150 lines; one-line active list; change log to `docs/`; hard rules referenced not copied (§3.3) → plan `implementations/shrinking-intros/` | ✅ owner: do asap | 🔲 |
 | 8 | Triage dcm-manager's 23 open folders into active (≤ 3) / parked / ideas (§3.3) | 🔲 | 🔲 |
-| 9 | `dcx-flutter-core` path package for the three Flutter clients (§3.4) → plan `implementations/flutter-core/` | ✅ owner: yes, how-to left to the plan | 🔲 |
+| 9 | `dcx-flutter-core` path package for the three Flutter clients (§3.4) → `implementation-done/flutter-core/` | ✅ owner: yes, how-to left to the plan | ✅ 2026-09-27 |
 | 10 | Unity shared package — deferred until Racer nears release (§3.4) | 🔲 | ⏸ |
 | 11 | Sync scripts refuse a dirty dcm-web; `HttpShared` single location (§3.5) | 🔲 | 🔲 |
 | 12 | Move web masters from hunter-manager to `general-manager/docs/web/`; delete `dcm-manager/tools` v1; fix README pointers (§3.5) | 🔲 | 🔲 |

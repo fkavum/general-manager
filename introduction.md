@@ -47,6 +47,8 @@ Adding an app: take the next free `NN`, add a row to the app table above and to 
 Same convention as the app managers: multi-project features get a folder `general-manager/implementations/{feature}/`
 with per-project notes and a `session_progress.md`. Move to `implementation-done/` when finished.
 Current: `implementations/port-scheme/` — the migration to the `2NNRR` scheme.
+Done 2026-09-27: `implementation-done/flutter-core/` — the shared Flutter package `dcx_flutter_core` (Hunter upstream,
+flash/tapit vendored + `tool/sync-flutter-core.sh`), adopted by all three clients; see "Flutter clients" below.
 Done 2026-09-25: `implementation-done/identity-endpoints/` — the user's self-service routes (`me`, `change_name`, delete
 request, language; server-tier `change_status`/`set_language`/`set_name`) moved into `Identity` for every project, Crossle
 keeps only `get` + `public_profile`; `IdentityOptions.ClientEditable` decides per app which user-tier routes the client may call.
@@ -62,6 +64,23 @@ Decided 2026-09-27, details in `docs/app-icons/README.md`: **every Flutter clien
 (`app_icons.swift`, copied byte-identical to `<client>/tool/`) and the client registry (`apps.txt`). No packages.
 `./icons.sh apply <app|all>` pushes and regenerates, `./icons.sh check` is the sync gate. Never edit a client's icon
 files by hand. Adopted: Hunter, Flash. Not yet: Tapit.
+
+## Flutter clients — shared package
+
+Decided and implemented 2026-09-27, details in `implementation-done/flutter-core/`: **`dcx_flutter_core` is the Flutter twin of the dcm-web upstream.** It lives in Hunter's repo at
+`testapp/packages/dcx_flutter_core/` and owns `config` (`AppConfig`, `API_BASE_URL` without `/api`), `api`
+(`ApiClient`, `ApiException`, `ServerUnavailableException`), `auth` (`DcmAuth` over the shared Auth/Identity),
+`bootstrap` (`BootstrapGate`, `ServerUnavailableScreen`), `widgets`, `theme`, `storage`, the launcher
+(`dart run dcx_flutter_core:run [env] [device]`) and the baseline theme gate.
+
+- Exists in the package → import it; needed by a second client → promote it there. Never copy client → client.
+- Hunter: `path: ../packages/dcx_flutter_core` (Docker context = repo root). Flash, Tapit (own repos, built by
+  Dokploy from their own checkout): vendored copy `<client>/packages/dcx_flutter_core/`, pulled by the client's own
+  `tool/sync-flutter-core.sh [--check]` (writes `tool/flutter-core.lock.md`) — the twin of `Tools/sync-dcm-features.sh`.
+- `templates/AI_RULES.md` + `templates/Docker/nginx.conf` are byte-identical in every client (`tool/templates.sh
+  apply|check`); per-client rules in `AI_RULES.local.md`.
+- Gate: `bash/flutter-core-check.sh` (package + copies + templates + each client's analyze/test/theme gate).
+- Adopted: Flash (incl. `auth`), Hunter (incl. `auth`), Tapit (no `auth` until tapit-web moves to Identity).
 
 ## Upstream ownership (web projects)
 
