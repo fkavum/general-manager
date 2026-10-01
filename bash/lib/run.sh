@@ -54,6 +54,7 @@ $( [ "$MODE" = docker ] \
   --terminal=X      auto (default) | wezterm | tmux | os | none
   --wezterm | --tmux | --no-terminal
   --dry-run         print what each pane would run, launch nothing
+  --debug           print every diagnostic line (they always go to .run/run.log)
 USAGE
       exit 0 ;;
     *) gm_die "unknown option: $arg (try --help)" ;;

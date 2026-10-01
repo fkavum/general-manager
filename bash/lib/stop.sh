@@ -17,6 +17,7 @@ for arg in "$@"; do
     --stop-infra)  STOP_INFRA=1 ;;
     --keep-infra)  STOP_INFRA=0 ;;   # accepted for symmetry; already the default
     --keep-ports)  KILL_PORTS=0 ;;
+    --debug)       GM_DEBUG=1 ;;
     --volumes)     VOLUMES="--volumes" ;;
     --with=*)      WITH="$WITH $(printf '%s' "${arg#*=}" | tr ',' ' ')" ;;
     --app-env=*)   GM_APP_ENV="${arg#*=}" ;;
@@ -37,6 +38,7 @@ usage: stop.sh [--stop-infra] [--volumes] [--with=a,b] [--app-env=F] [--infra-en
   --keep-ports   do not touch leftover local processes
   --volumes      also drop the app stacks' anonymous volumes
   --with=a,b     also stop these optional services
+  --debug        print every diagnostic line (they always go to .run/stop.log)
 USAGE
       exit 0 ;;
     *) gm_die "unknown option: $arg (try --help)" ;;

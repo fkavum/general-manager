@@ -6,9 +6,34 @@
 # and knows nothing about any one project. Each tools/ script declares its own
 # services with gm_add_pane and hands them to gm_run_panes.
 
-gm_die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-gm_info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
-gm_warn() { printf '\033[33mwarn:\033[0m %s\n' "$*" >&2; }
+# Everything printed is also appended (without colour) to $GM_LOG, which gm_init
+# points at .run/<script>.log - one file to read or send when something breaks.
+_gm_log() { if [ -n "${GM_LOG:-}" ]; then printf '%s %s\n' "$(date '+%H:%M:%S')" "$*" >> "$GM_LOG" 2>/dev/null; fi; return 0; }
+gm_die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; _gm_log "error: $*"
+            if [ -n "${GM_LOG:-}" ]; then printf '       (launcher log: %s)\n' "$GM_LOG" >&2; fi; exit 1; }
+gm_info() { printf '\033[36m==>\033[0m %s\n' "$*"; _gm_log "info: $*"; }
+gm_warn() { printf '\033[33mwarn:\033[0m %s\n' "$*" >&2; _gm_log "warn: $*"; }
+# extra detail: always in the log, on screen only with GM_DEBUG=1 (--debug)
+gm_debug() { if [ "${GM_DEBUG:-0}" = 1 ]; then printf '\033[2mdebug: %s\033[0m\n' "$*" >&2; fi; _gm_log "debug: $*"; }
+
+# set -e stops a script at the first failing command without saying which one.
+# This trap names it: file, line, command and what the exit code usually means.
+_gm_on_err() { # <status> <command> <file> <line>
+  local st="$1" hint=""
+  # inside $(...) a failure is often expected (grep finding nothing); only the
+  # top-level shell's failures are the ones set -e actually stops on
+  [ "${BASH_SUBSHELL:-0}" = 0 ] || return 0
+  case "$st" in
+    127) hint="command not found - the program is not installed or not on PATH" ;;
+    126) hint="found but not executable (permissions, or Windows cannot run this file type)" ;;
+    130) hint="interrupted (Ctrl-C)" ;;
+    1)   hint="the command reported failure; its own message, if any, is just above" ;;
+  esac
+  printf '\033[31merror:\033[0m command failed with exit code %s\n       at %s:%s\n       command: %s\n' \
+    "$st" "$3" "$4" "$2" >&2
+  [ -n "$hint" ] && printf '       meaning: %s\n' "$hint" >&2
+  _gm_log "error: exit $st at $3:$4: $2${hint:+ ($hint)}"
+}
 
 # single-quote a value so it can be pasted into a generated script
 gm_sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
@@ -35,9 +60,11 @@ gm_init() { # call once, first thing, from a tools/ script
   GM_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   RUN_DIR="$TOOLS_DIR/.run"
 
+  GM_IS_WINDOWS=0
   case "$(uname -s)" in
     Darwin) GM_OS=mac ;;
     Linux)  GM_OS=linux ;;
+    MINGW*|MSYS*|CYGWIN*) GM_OS=other; GM_IS_WINDOWS=1 ;;
     *)      GM_OS=other ;;
   esac
 
@@ -47,6 +74,44 @@ gm_init() { # call once, first thing, from a tools/ script
   GM_WAIT="$GM_LIB_DIR/waitport.sh"
   GM_TAILER="$GM_LIB_DIR/tailer.sh"
   mkdir -p "$RUN_DIR"
+
+  GM_LOG="$RUN_DIR/$(basename "$0" .sh).log"
+  : > "$GM_LOG" 2>/dev/null || GM_LOG=""
+  set -o errtrace
+  trap '_gm_on_err "$?" "$BASH_COMMAND" "${BASH_SOURCE[0]:-?}" "$LINENO"' ERR
+  _gm_report_platform
+}
+
+# What this machine looks like, so a failure can be read against it. The full
+# report goes to the log; on Windows the parts known not to work are said up front.
+_gm_report_platform() {
+  local t
+  _gm_log "platform: uname=$(uname -s) GM_OS=$GM_OS windows=$GM_IS_WINDOWS bash=$BASH_VERSION"
+  _gm_log "platform: SHELL=${SHELL:-unset} bash=$(command -v bash) TOOLS_DIR=$TOOLS_DIR"
+  for t in docker dotnet wezterm tmux lsof ps netstat taskkill osascript; do
+    _gm_log "platform: $t -> $(command -v "$t" 2>/dev/null || echo MISSING)"
+  done
+
+  case "$PATH" in
+    *$'\n'*)
+      local rc_hint=""
+      [ -f "$HOME/.bashrc" ] && rc_hint="$(grep -n '^[[:space:]]*echo' "$HOME/.bashrc" | head -3 | sed 's/^/        ~\/.bashrc:/')"
+      gm_warn "PATH contains a line break; its first entry is $(printf '%q' "${PATH%%:*}").
+  Some shell startup file printed text while PATH was being assembled. env.sh copies
+  PATH into every pane, so that broken entry (and the folder it hides) travels along.${rc_hint:+
+  echo lines in your ~/.bashrc:
+$rc_hint}" ;;
+  esac
+
+  [ "$GM_IS_WINDOWS" = 1 ] || return 0
+  gm_warn "Windows detected (uname: $(uname -s)) - running under Git Bash / MSYS, GM_OS=other.
+  This lib was written and tested on macOS/Linux. Git Bash emulates the shell, but
+  the programs it starts (wezterm, docker, dotnet) are native Windows programs, so
+  these assumptions do not hold here:
+    - a .sh file can be executed directly      (Windows ignores the #! line)
+    - paths look like /c/...                   (native programs want C:\\...)
+    - lsof, 'ps -o', kill <pid>, tmux exist     (they do not, or see MSYS pids only)
+  Each place that hits one of these explains itself below. Log: $GM_LOG"
 }
 
 # Infra compose env file: an explicit choice, else the one matching this machine.
@@ -63,7 +128,7 @@ gm_pick_env_file() { # <dir> [explicit]
              [ -f "$dir/$candidate" ] && { printf '%s' "$candidate"; return 0; }
            done ;;
     linux) [ -f "$dir/.env.ubuntu" ] && { printf '%s' .env.ubuntu; return 0; } ;;
-    *)     [ -f "$dir/.env.win" ] && { printf '%s' .env.win; return 0; } ;;
+    *)     [ -f "$dir/.env.win" ] && { gm_debug "GM_OS=$GM_OS -> picked .env.win in $dir" >&2; printf '%s' .env.win; return 0; } ;;
   esac
   gm_die "no env file found in $dir (looked for .env.mac/.env.ubuntu/.env.win)
   Create one, or pass --infra-env=<name> - it is the file docker compose reads."
@@ -83,6 +148,23 @@ gm_prepare_bind_paths() { # <env-file> <base-dir>
     case "$val" in
       /*) path="$val" ;;
       *)  path="$base/$val" ;;   # relative paths resolve against the compose file
+    esac
+    gm_debug "bind path $(basename "$file"): $key=$val -> checking $path"
+    case "$val" in
+      [A-Za-z]:[\\/]*)
+        gm_warn "$(basename "$file"): $key=$val is a Windows drive path, but this check only
+  treats /... as absolute, so it is read as RELATIVE and resolved to:
+    $path
+  That creates an empty folder literally named '${val%%[\\/]*}' inside $base.
+  Docker itself still reads the real $val, so the stack is unaffected -
+  only this pre-check looks in (and creates) the wrong place." ;;
+      /*)
+        if [ "$GM_IS_WINDOWS" = 1 ]; then
+          gm_warn "$(basename "$file"): $key=$val is a Unix path on Windows. Two different folders:
+    Git Bash (this check, logs.sh) -> $(cygpath -w "$val" 2>/dev/null || echo '?')
+    Docker Desktop (the container)  -> $val inside Docker's Linux VM, not on C:
+  The mount works, but logs/data are not where the tools on this machine look."
+        fi ;;
     esac
     [ -d "$path" ] && continue
     mkdir -p "$path" 2>/dev/null || bad="$bad
@@ -160,8 +242,24 @@ gm_port_holder() { # <port> -> description, empty if free
   if [ -n "$c" ]; then printf 'docker container %s' "$c"; return 0; fi
   if command -v lsof >/dev/null 2>&1; then
     who="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -Fc 2>/dev/null | sed -n 's/^c//p' | head -1)"
+  elif [ "$GM_IS_WINDOWS" = 1 ]; then
+    who="$(_gm_win_listeners "$port")"; who="${who:+$who (seen via netstat; lsof is not available on Windows)}"
+  else
+    who="another process (lsof not installed, so it cannot be named)"
   fi
   printf '%s' "${who:-another process}"
+}
+
+# Read-only, diagnostics only: who listens on <port> according to Windows itself.
+# Windows pids are not MSYS pids - MSYS 'ps'/'kill' cannot see or signal them.
+_gm_win_listeners() { # <port> -> "pid 1234 (dotnet.exe), …" or empty
+  local pid name out=""
+  for pid in $(netstat -ano -p tcp 2>/dev/null | tr -d '\r' \
+               | awk -v p=":$1" '$4=="LISTENING" && substr($2, length($2)-length(p)+1)==p {print $5}' | sort -u); do
+    name="$(tasklist //FI "PID eq $pid" //FO CSV //NH 2>/dev/null | tr -d '\r' | head -1 | cut -d'"' -f2)"
+    out="${out:+$out, }pid $pid (${name:-?})"
+  done
+  printf '%s' "$out"
 }
 
 gm_check_ports_free() { # <port>…
@@ -184,7 +282,25 @@ gm_check_ports_free() { # <port>…
 # KILL so the app gets to shut down cleanly.
 gm_kill_port_holders() { # <port>…
   if ! command -v lsof >/dev/null 2>&1; then
-    gm_warn "lsof not found - cannot look for leftover local processes on $*"
+    gm_warn "lsof not found - skipped the leftover-process sweep on ports $*.
+  What this step does: after 'docker compose down', find whatever still LISTENs on
+  this project's ports (usually a forgotten run-manual.sh) and stop it, via
+  lsof (pid of the listener) -> ps -o comm= (its name) -> kill (TERM, then KILL).
+  Why it cannot run here: lsof ships with macOS/Linux and does not exist in Git Bash$(
+    [ "$GM_IS_WINDOWS" = 1 ] && printf '%s' ".
+  'ps -o' is not supported by MSYS ps either, and MSYS kill cannot signal native
+  Windows processes such as dotnet.exe - the Windows tools are netstat + taskkill")."
+    if [ "$GM_IS_WINDOWS" = 1 ]; then
+      local p holders found=0
+      for p in "$@"; do
+        holders="$(_gm_win_listeners "$p")"
+        [ -n "$holders" ] || continue
+        found=1
+        gm_warn "port $p is still held by $holders - NOT stopped (taskkill //PID <pid> //T //F does it by hand)"
+      done
+      [ "$found" = 1 ] || gm_info "netstat: nothing is listening on ports $* - no leftovers to stop anyway"
+    fi
+    gm_info "the docker stacks above are down; only this sweep was skipped (--keep-ports skips it on purpose)"
     return 0
   fi
   local p pid cmd pids survivors=""
@@ -357,6 +473,14 @@ _gm_write_pane_rc() { # <pane-file-stem> <command> -> the exec line to append
       ;;
     *)
       # unknown shell: no history seeding, but still an interactive prompt
+      # called inside $(...), so a variable would not survive: warn once via a file
+      if [ ! -e "$RUN_DIR/rc/.shell-warned" ]; then
+        : > "$RUN_DIR/rc/.shell-warned"
+        gm_warn "SHELL=$SHELL: its name '$(basename "${SHELL:-/bin/bash}")' matches neither 'bash' nor 'zsh'$(
+          case "$SHELL" in *.exe) printf ' (the .exe suffix Git Bash adds)' ;; esac),
+  so panes get a plain '$SHELL -i' after the service stops: no rc file, and ↑ will
+  not re-run the service." >&2
+      fi
       printf 'exec %q -i' "${SHELL:-/bin/bash}"
       ;;
   esac
@@ -366,7 +490,8 @@ gm_write_panes() { # <mode>
   local mode="$1" i file stem main execline
   PANE_FILES=()
   rm -f "$RUN_DIR/${mode}-"*.sh   # stale panes from a run with a different --no-* set
-  rm -rf "$RUN_DIR/rc"
+  rm -rf "$RUN_DIR/rc" "$RUN_DIR/alive"
+  mkdir -p "$RUN_DIR/alive"
   for i in "${!PANE_NAMES[@]}"; do
     stem="${mode}-$((i+1))-${PANE_NAMES[$i]}"
     file="$RUN_DIR/$stem.sh"
@@ -377,6 +502,8 @@ gm_write_panes() { # <mode>
     {
       echo '#!/usr/bin/env bash'
       echo "# generated by $TOOLS_DIR - regenerated on every run"
+      # first thing: prove the terminal could start this script (see _gm_verify_panes)
+      printf ': > %q\n' "$RUN_DIR/alive/$stem"
       printf '. %q\n' "$RUN_DIR/env.sh"
       # closing the pane sends SIGHUP; take the child (dotnet/compose) down with us
       echo "trap 'trap - HUP TERM; kill 0' HUP TERM"
@@ -431,13 +558,14 @@ _gm_wezterm_mux_up() { # <wezterm bin>
 # Four panes come out as the 2x2 grid; a fifth or sixth stays readable instead of
 # being stacked into a 2-row sliver.
 _gm_launch_wezterm() {
-  local wez; wez="$(gm_find_wezterm)" || return 1
-  _gm_wezterm_mux_up "$wez" || { gm_warn "WezTerm mux did not come up"; return 1; }
+  local wez; wez="$(gm_find_wezterm)" || { GM_LAUNCH_WHY="wezterm not found"; return 1; }
+  _gm_wezterm_mux_up "$wez" || { GM_LAUNCH_WHY="WezTerm mux did not come up"; gm_warn "$GM_LAUNCH_WHY"; return 1; }
 
   local ids=() w=() h=() i best bi dir pid
   for i in "${!PANE_FILES[@]}"; do
+    gm_debug "wezterm pane $((i+1)): program = ${PANE_FILES[$i]}"
     if [ "$i" -eq 0 ]; then
-      pid="$("$wez" cli spawn --new-window -- "${PANE_FILES[$i]}")" || return 1
+      pid="$("$wez" cli spawn --new-window -- "${PANE_FILES[$i]}")" || { GM_LAUNCH_WHY="'wezterm cli spawn' failed"; return 1; }
       ids+=("$pid")
       # real cell size of the new window, so the split choices match what you see
       local size; size="$("$wez" cli list 2>/dev/null | awk -v id="$pid" '$3==id {print $5}')"
@@ -454,7 +582,7 @@ _gm_launch_wezterm() {
     done
 
     if [ "${w[$bi]}" -ge $(( h[bi] * 2 )) ]; then dir=--right; else dir=--bottom; fi
-    pid="$("$wez" cli split-pane --pane-id "${ids[$bi]}" "$dir" --percent 50 -- "${PANE_FILES[$i]}")" || return 1
+    pid="$("$wez" cli split-pane --pane-id "${ids[$bi]}" "$dir" --percent 50 -- "${PANE_FILES[$i]}")" || { GM_LAUNCH_WHY="'wezterm cli split-pane' failed"; return 1; }
     ids+=("$pid")
     if [ "$dir" = --right ]; then
       w+=($(( w[bi] / 2 ))); h+=(${h[$bi]}); w[$bi]=$(( w[bi] - w[bi] / 2 ))
@@ -466,12 +594,53 @@ _gm_launch_wezterm() {
   "$wez" cli activate-pane --pane-id "${ids[0]}" >/dev/null 2>&1 || true
   GM_PANE_IDS="${ids[*]}"   # so callers (tools/test.sh) can inspect or close them
   GM_WEZTERM_BIN="$wez"
-  gm_info "launched ${#PANE_FILES[@]} panes in WezTerm"
+  gm_info "launched ${#PANE_FILES[@]} panes in WezTerm (pane ids: ${ids[*]})"
+}
+
+# A terminal reporting "pane created" only means it tried. Every pane script
+# writes .run/alive/<stem> as its first line; a missing marker means the terminal
+# could not run the script at all - say which pane, what it was told to run, and
+# (WezTerm) what the pane itself shows.
+_gm_verify_panes() { # <launcher>
+  local launcher="$1" i stem waited=0 missing=() ids=()
+  read -r -a ids <<< "${GM_PANE_IDS:-}"
+  while :; do
+    missing=()
+    for i in "${!PANE_FILES[@]}"; do
+      stem="$(basename "${PANE_FILES[$i]}" .sh)"
+      [ -e "$RUN_DIR/alive/$stem" ] || missing+=("$i")
+    done
+    if [ "${#missing[@]}" -eq 0 ]; then gm_info "all ${#PANE_FILES[@]} panes started their scripts"; return 0; fi
+    [ "$waited" -ge 8 ] && break
+    sleep 0.5; waited=$((waited + 1))
+  done
+
+  gm_warn "${#missing[@]} of ${#PANE_FILES[@]} panes never started their script (no marker in $RUN_DIR/alive after 4s)."
+  local shown
+  for i in "${missing[@]}"; do
+    gm_warn "pane $((i+1)) [${PANE_NAMES[$i]}]: the terminal was told to run ${PANE_FILES[$i]}"
+    if [ "$launcher" = wezterm ] && [ -n "${ids[$i]:-}" ] && [ -n "${GM_WEZTERM_BIN:-}" ]; then
+      shown="$("$GM_WEZTERM_BIN" cli get-text --pane-id "${ids[$i]}" 2>/dev/null | grep -v '^[[:space:]]*$' | head -4 | sed 's/^/        | /' || true)"
+      if [ -n "$shown" ]; then
+        printf '      WezTerm pane %s shows:\n%s\n' "${ids[$i]}" "$shown" >&2
+        _gm_log "pane ${ids[$i]} shows: $shown"
+      fi
+    fi
+  done
+  if [ "$GM_IS_WINDOWS" = 1 ]; then
+    gm_warn "Why (Windows): the terminal starts the pane program with Windows' CreateProcess.
+  It was handed a .sh file at an MSYS path (/c/...). Windows cannot execute a .sh
+  file (the #! line means nothing to it) and does not know /c/... paths, so the
+  process fails at once (exit 1) - before the script's first line runs. Git Bash
+  translates this only for programs it runs itself, not for what WezTerm starts.
+  What does work: running it through bash, e.g.  bash.exe C:\...\.run\<pane>.sh"
+  fi
+  gm_die "pane launch failed - the services were NOT started"
 }
 
 # ----------------------------------------------------------------- tmux ----
 _gm_launch_tmux() { # <session>
-  command -v tmux >/dev/null 2>&1 || return 1
+  command -v tmux >/dev/null 2>&1 || { GM_LAUNCH_WHY="tmux is not installed"; return 1; }
   local session="$1" i
   if tmux has-session -t "$session" 2>/dev/null; then
     gm_warn "replacing existing tmux session '$session'"
@@ -506,7 +675,7 @@ _gm_launch_os() {
       for t in gnome-terminal konsole xfce4-terminal x-terminal-emulator xterm; do
         command -v "$t" >/dev/null 2>&1 && { term="$t"; break; }
       done
-      [ -n "$term" ] || return 1
+      [ -n "$term" ] || { GM_LAUNCH_WHY="no gnome-terminal/konsole/xfce4-terminal/xterm found"; return 1; }
       for f in "${PANE_FILES[@]}"; do
         case "$term" in
           gnome-terminal) gnome-terminal --tab -- "$f" ;;
@@ -516,7 +685,8 @@ _gm_launch_os() {
       done
       gm_info "opened ${#PANE_FILES[@]} $term windows"
       ;;
-    *) return 1 ;;
+    *) GM_LAUNCH_WHY="no plain-terminal launcher for GM_OS=$GM_OS (only mac: Terminal.app, linux: gnome-terminal/konsole/xterm)"
+       return 1 ;;
   esac
 }
 
@@ -548,17 +718,24 @@ gm_run_panes() { # <mode>
   case "$GM_TERMINAL" in
     wezterm)
       gm_find_wezterm >/dev/null || gm_die "WezTerm not found (not on PATH, and no /Applications/WezTerm.app)"
-      _gm_launch_wezterm || gm_die "WezTerm launch failed" ;;
+      _gm_launch_wezterm || gm_die "WezTerm launch failed: ${GM_LAUNCH_WHY:-see log}"
+      _gm_verify_panes wezterm ;;
     tmux)
       command -v tmux >/dev/null 2>&1 || gm_die "tmux is not installed (brew install tmux)"
       _gm_launch_tmux "$session" || gm_die "tmux launch failed" ;;
-    os)      _gm_launch_os || gm_die "no usable terminal emulator found" ;;
+    os)      _gm_launch_os || gm_die "no usable terminal emulator found: ${GM_LAUNCH_WHY:-}"
+             _gm_verify_panes os ;;
     none)    _gm_launch_none ;;
     auto)
-      _gm_launch_wezterm 2>/dev/null \
-        || _gm_launch_tmux "$session" \
-        || _gm_launch_os \
-        || _gm_launch_none
+      # try each in turn; say why one was skipped instead of falling through silently
+      GM_LAUNCH_WHY=""
+      if _gm_launch_wezterm 2>>"${GM_LOG:-/dev/null}"; then _gm_verify_panes wezterm; return 0; fi
+      gm_info "terminal: WezTerm not used - ${GM_LAUNCH_WHY:-see log}"; GM_LAUNCH_WHY=""
+      if _gm_launch_tmux "$session"; then return 0; fi
+      gm_info "terminal: tmux not used - ${GM_LAUNCH_WHY:-tmux launch failed}"; GM_LAUNCH_WHY=""
+      if _gm_launch_os; then _gm_verify_panes os; return 0; fi
+      gm_info "terminal: OS terminal windows not used - ${GM_LAUNCH_WHY:-launch failed}"
+      _gm_launch_none
       ;;
     *) gm_die "unknown GM_TERMINAL '$GM_TERMINAL' (auto|wezterm|tmux|os|none)" ;;
   esac
@@ -568,6 +745,7 @@ gm_run_panes() { # <mode>
 gm_parse_common_arg() { # returns 0 if the arg was consumed
   case "$1" in
     --dry-run)      GM_DRY_RUN=1 ;;
+    --debug)        GM_DEBUG=1 ;;
     --terminal=*)   GM_TERMINAL_CLI="${1#*=}"; GM_TERMINAL="$GM_TERMINAL_CLI" ;;
     --wezterm)      GM_TERMINAL_CLI=wezterm; GM_TERMINAL=wezterm ;;
     --tmux)         GM_TERMINAL_CLI=tmux;    GM_TERMINAL=tmux ;;
