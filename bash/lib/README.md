@@ -5,7 +5,25 @@ One implementation of the local-run tooling, used by `flash-manager`,
 Each of those has a runner folder that is **only** wrappers plus a description
 of itself; everything executable lives here.
 
-The Windows half is `../../cmd/lib` — same concepts, same declarations.
+Runs on macOS, Linux and **Windows under Git Bash**. The Windows half,
+`../../cmd/lib` (cmd.exe), still exists with the same concepts and declarations.
+
+### Windows (Git Bash) notes
+
+Git Bash emulates the shell, but what it starts (WezTerm, docker, dotnet) are
+native Windows programs, so a few things take a Windows branch (`GM_OS=windows`):
+
+* **Panes** are launched as `C:\Program Files\Gitinash.exe C:\...\.run\<pane>.sh` —
+  Windows cannot execute a `.sh` file or resolve an MSYS `/c/...` path itself.
+  Every pane writes `.run/alive/<pane>` as its first line, and the launcher fails
+  loudly if one never appears instead of reporting "launched".
+* **Ports** (`run-manual` preflight, `stop.sh` sweep) use `netstat` / `tasklist` /
+  `taskkill` instead of `lsof` / `ps` / `kill`, which cannot see native processes.
+  Docker's forwarders and system processes are never killed.
+* **Env files**: `.env.win` is picked; `C:\...` bind paths are absolute. Unix
+  paths (`/opt/...`) in a stack's env file live inside Docker Desktop's VM and are
+  not created on the host — logs written there are not visible to `logs.sh`.
+* **Logs**: every run writes `.run/<script>.log`; `--debug` shows it on screen.
 
 ```
 general-manager/
@@ -146,5 +164,5 @@ only be run, and its goldens only produced, on Windows.
 * **Ctrl-C stops a service without closing its pane** — you land in an
   interactive shell with the command in history, so `↑` re-runs it.
 
-Shell only. The `.bat` half of this exists in `dcm-manager/tools` if a Windows
-machine ever needs these four.
+Shell only - on Windows these run under Git Bash too. The `.bat` half of this
+exists in `dcm-manager/tools` for plain cmd.exe.

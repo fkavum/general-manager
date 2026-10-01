@@ -64,7 +64,7 @@ gm_init() { # call once, first thing, from a tools/ script
   case "$(uname -s)" in
     Darwin) GM_OS=mac ;;
     Linux)  GM_OS=linux ;;
-    MINGW*|MSYS*|CYGWIN*) GM_OS=other; GM_IS_WINDOWS=1 ;;
+    MINGW*|MSYS*|CYGWIN*) GM_OS=windows; GM_IS_WINDOWS=1 ;;
     *)      GM_OS=other ;;
   esac
 
@@ -96,7 +96,7 @@ _gm_report_platform() {
     *$'\n'*)
       local rc_hint=""
       [ -f "$HOME/.bashrc" ] && rc_hint="$(grep -n '^[[:space:]]*echo' "$HOME/.bashrc" | head -3 | sed 's/^/        ~\/.bashrc:/')"
-      gm_warn "PATH contains a line break; its first entry is $(printf '%q' "${PATH%%:*}").
+      gm_debug "PATH contains a line break; its first entry is $(printf '%q' "${PATH%%:*}").
   Some shell startup file printed text while PATH was being assembled. env.sh copies
   PATH into every pane, so that broken entry (and the folder it hides) travels along.${rc_hint:+
   echo lines in your ~/.bashrc:
@@ -104,14 +104,31 @@ $rc_hint}" ;;
   esac
 
   [ "$GM_IS_WINDOWS" = 1 ] || return 0
-  gm_warn "Windows detected (uname: $(uname -s)) - running under Git Bash / MSYS, GM_OS=other.
-  This lib was written and tested on macOS/Linux. Git Bash emulates the shell, but
-  the programs it starts (wezterm, docker, dotnet) are native Windows programs, so
-  these assumptions do not hold here:
-    - a .sh file can be executed directly      (Windows ignores the #! line)
-    - paths look like /c/...                   (native programs want C:\\...)
-    - lsof, 'ps -o', kill <pid>, tmux exist     (they do not, or see MSYS pids only)
-  Each place that hits one of these explains itself below. Log: $GM_LOG"
+  # Git Bash emulates the shell, but what it starts (wezterm, docker, dotnet) are
+  # native Windows programs: they cannot execute a .sh file, do not know /c/...
+  # paths, and are invisible to MSYS ps/kill. The Windows branches below cover it.
+  gm_debug "Windows (Git Bash): panes run through $(_gm_win_bash), ports via netstat/taskkill"
+}
+
+# The bash.exe a native program (WezTerm, cmd's start) can launch a pane with.
+# Git's bin\bash.exe sets up the MSYS environment itself; usr\bin\bash.exe is the fallback.
+_gm_win_bash() {
+  local root; root="$(cygpath -w / 2>/dev/null)"; root="${root%\\}"
+  if [ -f "$root\\bin\\bash.exe" ]; then printf '%s' "$root\\bin\\bash.exe"
+  else cygpath -w "$(command -v bash)"; fi
+}
+
+# argv a terminal needs to run one pane script, one element per line (no spaces
+# are split). macOS/Linux execute the script via its #! line; Windows needs bash.exe
+# and a C:\ path in front of it.
+_gm_pane_argv() { # <pane file>
+  if [ "$GM_IS_WINDOWS" = 1 ]; then printf '%s\n%s\n' "$(_gm_win_bash)" "$(cygpath -w "$1")"
+  else printf '%s\n' "$1"; fi
+}
+# ...into GM_ARGV - a read loop, because macOS bash 3.2 has no mapfile
+_gm_load_argv() { # <pane file>
+  local l; GM_ARGV=()
+  while IFS= read -r l; do GM_ARGV+=("$l"); done < <(_gm_pane_argv "$1")
 }
 
 # Infra compose env file: an explicit choice, else the one matching this machine.
@@ -128,7 +145,7 @@ gm_pick_env_file() { # <dir> [explicit]
              [ -f "$dir/$candidate" ] && { printf '%s' "$candidate"; return 0; }
            done ;;
     linux) [ -f "$dir/.env.ubuntu" ] && { printf '%s' .env.ubuntu; return 0; } ;;
-    *)     [ -f "$dir/.env.win" ] && { gm_debug "GM_OS=$GM_OS -> picked .env.win in $dir" >&2; printf '%s' .env.win; return 0; } ;;
+    *)     [ -f "$dir/.env.win" ] && { gm_debug "GM_OS=$GM_OS -> picked .env.win in $dir" >&2; printf '%s' .env.win; return 0; } ;;   # windows
   esac
   gm_die "no env file found in $dir (looked for .env.mac/.env.ubuntu/.env.win)
   Create one, or pass --infra-env=<name> - it is the file docker compose reads."
@@ -146,26 +163,18 @@ gm_prepare_bind_paths() { # <env-file> <base-dir>
     val="$(gm_env_get "$file" "$key" "")"
     [ -n "$val" ] || continue
     case "$val" in
-      /*) path="$val" ;;
-      *)  path="$base/$val" ;;   # relative paths resolve against the compose file
-    esac
-    gm_debug "bind path $(basename "$file"): $key=$val -> checking $path"
-    case "$val" in
-      [A-Za-z]:[\\/]*)
-        gm_warn "$(basename "$file"): $key=$val is a Windows drive path, but this check only
-  treats /... as absolute, so it is read as RELATIVE and resolved to:
-    $path
-  That creates an empty folder literally named '${val%%[\\/]*}' inside $base.
-  Docker itself still reads the real $val, so the stack is unaffected -
-  only this pre-check looks in (and creates) the wrong place." ;;
+      [A-Za-z]:[\\/]*) path="$(cygpath -u "$val" 2>/dev/null || printf '%s' "$val")" ;;   # C:\... (.env.win)
       /*)
         if [ "$GM_IS_WINDOWS" = 1 ]; then
-          gm_warn "$(basename "$file"): $key=$val is a Unix path on Windows. Two different folders:
-    Git Bash (this check, logs.sh) -> $(cygpath -w "$val" 2>/dev/null || echo '?')
-    Docker Desktop (the container)  -> $val inside Docker's Linux VM, not on C:
-  The mount works, but logs/data are not where the tools on this machine look."
-        fi ;;
+          # Docker Desktop resolves /opt/... inside its Linux VM and creates it there;
+          # mkdir here would only make an unrelated folder under Git's install dir
+          gm_debug "bind path $(basename "$file"): $key=$val is inside Docker's VM on Windows - not created here"
+          continue
+        fi
+        path="$val" ;;
+      *)  path="$base/$val" ;;   # relative paths resolve against the compose file
     esac
+    gm_debug "bind path $(basename "$file"): $key=$val -> $path"
     [ -d "$path" ] && continue
     mkdir -p "$path" 2>/dev/null || bad="$bad
     $key=$val"
@@ -233,33 +242,82 @@ gm_ensure_network() { # <name>…
 # still holding them is a hard stop - report who has them, not an
 # "address already in use" stack trace three panes away.
 gm_port_holder() { # <port> -> description, empty if free
-  local port="$1" c who
-  # A connect test is the only check that sees Docker Desktop's published ports
-  # on macOS; lsof is used afterwards only to put a name on the holder.
-  (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null || return 0
-  exec 3>&- 2>/dev/null
+  local port="$1" c who=""
+  if [ "$GM_IS_WINDOWS" = 1 ]; then
+    # netstat sees every listener, Docker Desktop's published ports included, and
+    # answers at once - a connect to a closed port takes ~2s on Windows
+    who="$(_gm_win_listeners "$port")"
+    [ -n "$who" ] || return 0
+  else
+    # A connect test is the only check that sees Docker Desktop's published ports
+    # on macOS; lsof is used afterwards only to put a name on the holder.
+    (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null || return 0
+    exec 3>&- 2>/dev/null
+  fi
   c="$(docker ps --filter "publish=$port" --format '{{.Names}}' 2>/dev/null | head -1)"
   if [ -n "$c" ]; then printf 'docker container %s' "$c"; return 0; fi
-  if command -v lsof >/dev/null 2>&1; then
+  if [ "$GM_IS_WINDOWS" = 1 ]; then
+    :   # already named by netstat above
+  elif command -v lsof >/dev/null 2>&1; then
     who="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -Fc 2>/dev/null | sed -n 's/^c//p' | head -1)"
-  elif [ "$GM_IS_WINDOWS" = 1 ]; then
-    who="$(_gm_win_listeners "$port")"; who="${who:+$who (seen via netstat; lsof is not available on Windows)}"
   else
     who="another process (lsof not installed, so it cannot be named)"
   fi
   printf '%s' "${who:-another process}"
 }
 
-# Read-only, diagnostics only: who listens on <port> according to Windows itself.
-# Windows pids are not MSYS pids - MSYS 'ps'/'kill' cannot see or signal them.
+# Windows' own view of a port. Windows pids are not MSYS pids - MSYS 'ps'/'kill'
+# cannot see or signal them, so these go through netstat/tasklist/taskkill.
+_gm_win_listener_pids() { # <port> -> pids, one per line
+  netstat -ano -p tcp 2>/dev/null | tr -d '\r' \
+    | awk -v p=":$1" '$4=="LISTENING" && substr($2, length($2)-length(p)+1)==p {print $5}' | sort -u
+  # IPv6 listeners (dotnet binds [::]:port too) are listed separately
+  netstat -ano -p tcpv6 2>/dev/null | tr -d '\r' \
+    | awk -v p=":$1" '$4=="LISTENING" && substr($2, length($2)-length(p)+1)==p {print $5}' | sort -u
+}
+_gm_win_pname() { # <pid> -> image name, empty if gone
+  tasklist //FI "PID eq $1" //FO CSV //NH 2>/dev/null | tr -d '\r' | grep -F "\"$1\"" | head -1 | cut -d'"' -f2
+}
 _gm_win_listeners() { # <port> -> "pid 1234 (dotnet.exe), …" or empty
-  local pid name out=""
-  for pid in $(netstat -ano -p tcp 2>/dev/null | tr -d '\r' \
-               | awk -v p=":$1" '$4=="LISTENING" && substr($2, length($2)-length(p)+1)==p {print $5}' | sort -u); do
-    name="$(tasklist //FI "PID eq $pid" //FO CSV //NH 2>/dev/null | tr -d '\r' | head -1 | cut -d'"' -f2)"
-    out="${out:+$out, }pid $pid (${name:-?})"
+  local pid out=""
+  for pid in $(_gm_win_listener_pids "$1" | sort -u); do
+    out="${out:+$out, }pid $pid ($(_gm_win_pname "$pid"))"
   done
   printf '%s' "$out"
+}
+
+# stop.sh's leftover sweep, Windows edition: same rules as the lsof one below.
+_gm_win_kill_port_holders() { # <port>…
+  local p pid name survivors=""
+  for p in "$@"; do
+    if [ -n "$(docker ps --filter "publish=$p" --format '{{.Names}}' 2>/dev/null)" ]; then continue; fi
+    for pid in $(_gm_win_listener_pids "$p" | sort -u); do
+      name="$(_gm_win_pname "$pid")"
+      case "$name" in
+        ""|System|svchost.exe|com.docker.*|wslrelay.exe|vpnkit*|Docker*)
+          # never Windows itself or Docker's port forwarders
+          gm_warn "port $p held by pid $pid (${name:-?}) - not a leftover service, left alone"
+          continue ;;
+      esac
+      gm_info "port $p held by pid $pid ($name) - stopping it"
+      taskkill //PID "$pid" //T >/dev/null 2>&1 || true   # polite: close request
+      survivors="$survivors $pid"
+    done
+  done
+  [ -n "$survivors" ] || return 0
+
+  local i alive
+  for i in 1 2 3 4 5; do
+    alive=""
+    for pid in $survivors; do if [ -n "$(_gm_win_pname "$pid")" ]; then alive="$alive $pid"; fi; done
+    [ -n "$alive" ] || { gm_info "local processes stopped"; return 0; }
+    sleep 1
+  done
+  for pid in $alive; do
+    # console programs like dotnet.exe ignore the polite close - /F is expected here
+    gm_info "pid $pid still running - forcing it (taskkill /F /T)"
+    taskkill //PID "$pid" //T //F >/dev/null 2>&1 || gm_warn "taskkill /F failed for pid $pid"
+  done
 }
 
 gm_check_ports_free() { # <port>…
@@ -281,25 +339,13 @@ gm_check_ports_free() { # <port>…
 # when no container publishes them (compose owns those), and TERM comes before
 # KILL so the app gets to shut down cleanly.
 gm_kill_port_holders() { # <port>…
+  if [ "$GM_IS_WINDOWS" = 1 ]; then _gm_win_kill_port_holders "$@"; return 0; fi
   if ! command -v lsof >/dev/null 2>&1; then
     gm_warn "lsof not found - skipped the leftover-process sweep on ports $*.
   What this step does: after 'docker compose down', find whatever still LISTENs on
   this project's ports (usually a forgotten run-manual.sh) and stop it, via
   lsof (pid of the listener) -> ps -o comm= (its name) -> kill (TERM, then KILL).
-  Why it cannot run here: lsof ships with macOS/Linux and does not exist in Git Bash$(
-    [ "$GM_IS_WINDOWS" = 1 ] && printf '%s' ".
-  'ps -o' is not supported by MSYS ps either, and MSYS kill cannot signal native
-  Windows processes such as dotnet.exe - the Windows tools are netstat + taskkill")."
-    if [ "$GM_IS_WINDOWS" = 1 ]; then
-      local p holders found=0
-      for p in "$@"; do
-        holders="$(_gm_win_listeners "$p")"
-        [ -n "$holders" ] || continue
-        found=1
-        gm_warn "port $p is still held by $holders - NOT stopped (taskkill //PID <pid> //T //F does it by hand)"
-      done
-      [ "$found" = 1 ] || gm_info "netstat: nothing is listening on ports $* - no leftovers to stop anyway"
-    fi
+  Install lsof (it ships with macOS and most Linux distros) to enable it."
     gm_info "the docker stacks above are down; only this sweep was skipped (--keep-ports skips it on purpose)"
     return 0
   fi
@@ -453,7 +499,7 @@ gm_add_pane() { # <name> <title> <command block>
 _gm_write_pane_rc() { # <pane-file-stem> <command> -> the exec line to append
   local stem="$1" cmd="$2" rcdir="$RUN_DIR/rc/$stem"
   mkdir -p "$rcdir"
-  case "$(basename "${SHELL:-/bin/bash}")" in
+  case "$(basename "${SHELL:-/bin/bash}" .exe)" in   # Git Bash: SHELL=/bin/bash.exe
     zsh)
       {
         echo "# generated by $TOOLS_DIR - regenerated on every run"
@@ -477,7 +523,7 @@ _gm_write_pane_rc() { # <pane-file-stem> <command> -> the exec line to append
       if [ ! -e "$RUN_DIR/rc/.shell-warned" ]; then
         : > "$RUN_DIR/rc/.shell-warned"
         gm_warn "SHELL=$SHELL: its name '$(basename "${SHELL:-/bin/bash}")' matches neither 'bash' nor 'zsh'$(
-          case "$SHELL" in *.exe) printf ' (the .exe suffix Git Bash adds)' ;; esac),
+),
   so panes get a plain '$SHELL -i' after the service stops: no rc file, and ↑ will
   not re-run the service." >&2
       fi
@@ -563,9 +609,10 @@ _gm_launch_wezterm() {
 
   local ids=() w=() h=() i best bi dir pid
   for i in "${!PANE_FILES[@]}"; do
-    gm_debug "wezterm pane $((i+1)): program = ${PANE_FILES[$i]}"
+    _gm_load_argv "${PANE_FILES[$i]}"
+    gm_debug "wezterm pane $((i+1)): ${GM_ARGV[*]}"
     if [ "$i" -eq 0 ]; then
-      pid="$("$wez" cli spawn --new-window -- "${PANE_FILES[$i]}")" || { GM_LAUNCH_WHY="'wezterm cli spawn' failed"; return 1; }
+      pid="$("$wez" cli spawn --new-window -- "${GM_ARGV[@]}")" || { GM_LAUNCH_WHY="'wezterm cli spawn' failed"; return 1; }
       ids+=("$pid")
       # real cell size of the new window, so the split choices match what you see
       local size; size="$("$wez" cli list 2>/dev/null | awk -v id="$pid" '$3==id {print $5}')"
@@ -582,7 +629,7 @@ _gm_launch_wezterm() {
     done
 
     if [ "${w[$bi]}" -ge $(( h[bi] * 2 )) ]; then dir=--right; else dir=--bottom; fi
-    pid="$("$wez" cli split-pane --pane-id "${ids[$bi]}" "$dir" --percent 50 -- "${PANE_FILES[$i]}")" || { GM_LAUNCH_WHY="'wezterm cli split-pane' failed"; return 1; }
+    pid="$("$wez" cli split-pane --pane-id "${ids[$bi]}" "$dir" --percent 50 -- "${GM_ARGV[@]}")" || { GM_LAUNCH_WHY="'wezterm cli split-pane' failed"; return 1; }
     ids+=("$pid")
     if [ "$dir" = --right ]; then
       w+=($(( w[bi] / 2 ))); h+=(${h[$bi]}); w[$bi]=$(( w[bi] - w[bi] / 2 ))
@@ -618,7 +665,7 @@ _gm_verify_panes() { # <launcher>
   gm_warn "${#missing[@]} of ${#PANE_FILES[@]} panes never started their script (no marker in $RUN_DIR/alive after 4s)."
   local shown
   for i in "${missing[@]}"; do
-    gm_warn "pane $((i+1)) [${PANE_NAMES[$i]}]: the terminal was told to run ${PANE_FILES[$i]}"
+    gm_warn "pane $((i+1)) [${PANE_NAMES[$i]}]: the terminal was told to run: $(_gm_pane_argv "${PANE_FILES[$i]}" | tr '\n' ' ')"
     if [ "$launcher" = wezterm ] && [ -n "${ids[$i]:-}" ] && [ -n "${GM_WEZTERM_BIN:-}" ]; then
       shown="$("$GM_WEZTERM_BIN" cli get-text --pane-id "${ids[$i]}" 2>/dev/null | grep -v '^[[:space:]]*$' | head -4 | sed 's/^/        | /' || true)"
       if [ -n "$shown" ]; then
@@ -627,14 +674,8 @@ _gm_verify_panes() { # <launcher>
       fi
     fi
   done
-  if [ "$GM_IS_WINDOWS" = 1 ]; then
-    gm_warn "Why (Windows): the terminal starts the pane program with Windows' CreateProcess.
-  It was handed a .sh file at an MSYS path (/c/...). Windows cannot execute a .sh
-  file (the #! line means nothing to it) and does not know /c/... paths, so the
-  process fails at once (exit 1) - before the script's first line runs. Git Bash
-  translates this only for programs it runs itself, not for what WezTerm starts.
-  What does work: running it through bash, e.g.  bash.exe C:\...\.run\<pane>.sh"
-  fi
+  gm_warn "The pane's own output (above, for WezTerm) is the program's error. Run the
+  command above by hand to see it in full; the launcher log is $GM_LOG"
   gm_die "pane launch failed - the services were NOT started"
 }
 
@@ -685,7 +726,15 @@ _gm_launch_os() {
       done
       gm_info "opened ${#PANE_FILES[@]} $term windows"
       ;;
-    *) GM_LAUNCH_WHY="no plain-terminal launcher for GM_OS=$GM_OS (only mac: Terminal.app, linux: gnome-terminal/konsole/xterm)"
+    windows)
+      # one console window per pane; 'start' is a cmd builtin, the "" is its title slot
+      for f in "${PANE_FILES[@]}"; do
+        _gm_load_argv "$f"
+        cmd.exe //c start "" "${GM_ARGV[@]}" || { GM_LAUNCH_WHY="cmd start failed"; return 1; }
+      done
+      gm_info "opened ${#PANE_FILES[@]} console windows"
+      ;;
+    *) GM_LAUNCH_WHY="no plain-terminal launcher for GM_OS=$GM_OS"
        return 1 ;;
   esac
 }
