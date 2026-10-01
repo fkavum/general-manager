@@ -50,6 +50,8 @@ Current: `implementations/port-scheme/` — the migration to the `2NNRR` scheme.
 Current: `implementations/common-legal-pages/` — one privacy policy / terms / delete-account / support set on
 `dcxstudios.org/apps/…` (`privacy_policy`, `terms`, `delete_account`, `support`; publisher "Mehmet Fatih Kavum, trading as Dcx Studios") for the small apps, shared body + one section per app from a `legal`
 content collection; racer first, flash/hunter when they ship, Crossle keeps its own policy/terms but joins the delete page (blocked on a real performed delete in dcm-web), Tapit (B2B) excluded; contact `dcxstudios@gmail.com`.
+Machine sync (2026-10-01, `bash/sync/README.md`): `<manager>/tools/bash/sync/sync.sh <branch>` (DCM: `tools_v2/`)
+resets every repo of that app, including infra (`dcm-docker`) and submodules, to `origin/<branch>`. It reports first and asks before nuking.
 Done 2026-09-27: `implementation-done/flutter-core/` — the shared Flutter package `dcx_flutter_core` (Hunter upstream,
 flash/tapit vendored + `tool/sync-flutter-core.sh`), adopted by all three clients; see "Flutter clients" below.
 Done 2026-09-25: `implementation-done/identity-endpoints/` — the user's self-service routes (`me`, `change_name`, delete
