@@ -15,12 +15,17 @@ timeout="${4:-${GM_WAIT_TIMEOUT:-${DCM_WAIT_TIMEOUT:-180}}}"
 probe() { # -> 0 up, 1 refused, 2 accepted but closed at once (forwarder only)
   # braces: the 2>/dev/null must not stick to the shell the way 'exec ... 2>' would
   { exec 3<>"/dev/tcp/$host/$port"; } 2>/dev/null || return 1
-  local byte st
-  IFS= read -r -t 1 -n 1 byte <&3; st=$?
+  local byte st t=1 start
+  # bash 3.2 (macOS /bin/bash) returns 1 for a read timeout - the same as EOF -
+  # so there the two are told apart by elapsed time instead: EOF is instant, a
+  # 3s timeout always moves SECONDS by at least 2.
+  [ "${BASH_VERSINFO[0]}" -lt 4 ] && t=3
+  start=$SECONDS
+  IFS= read -r -t "$t" -n 1 byte <&3; st=$?
   exec 3<&- 3>&-
   # 0 = got data, >128 = read timed out on an open connection; both mean a live
   # server. 1 = EOF: something accepted and hung up without a word.
-  if [ "$st" -eq 1 ]; then return 2; fi
+  if [ "$st" -eq 1 ] && [ $((SECONDS - start)) -lt 2 ]; then return 2; fi
   return 0
 }
 
