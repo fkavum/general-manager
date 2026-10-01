@@ -47,6 +47,9 @@ Adding an app: take the next free `NN`, add a row to the app table above and to 
 Same convention as the app managers: multi-project features get a folder `general-manager/implementations/{feature}/`
 with per-project notes and a `session_progress.md`. Move to `implementation-done/` when finished.
 Current: `implementations/port-scheme/` — the migration to the `2NNRR` scheme.
+Current: `implementations/common-legal-pages/` — one privacy policy / terms / delete-account / support set on
+`dcxstudios.org/apps/…` (`privacy_policy`, `terms`, `delete_account`, `support`; publisher "Mehmet Fatih Kavum, trading as Dcx Studios") for the small apps, shared body + one section per app from a `legal`
+content collection; racer first, flash/hunter when they ship, Crossle keeps its own policy/terms but joins the delete page (blocked on a real performed delete in dcm-web), Tapit (B2B) excluded; contact `dcxstudios@gmail.com`.
 Done 2026-09-27: `implementation-done/flutter-core/` — the shared Flutter package `dcx_flutter_core` (Hunter upstream,
 flash/tapit vendored + `tool/sync-flutter-core.sh`), adopted by all three clients; see "Flutter clients" below.
 Done 2026-09-25: `implementation-done/identity-endpoints/` — the user's self-service routes (`me`, `change_name`, delete
