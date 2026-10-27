@@ -1,0 +1,22 @@
+#@upstream=dcm-web
+#@dest=web
+# card-platform twin manifest (master: general-manager/docs/twin/web.exclude) — the per-app paths of a dcm-web twin.
+# Everything not listed here is overwritten by twin/sync-upstream.sh. Never edit a synced path on a twin: change dcm-web
+# and re-sync. A twin-only file must live under one of these paths.
+# rsync patterns, anchored at the dcm-web root.
+
+# app wiring — which modules this app runs (and with which options)
+/Src/Main/Src/BootStrapper/AppModules.cs
+# per-app stats extension (AddStatsModule<TExtension>); Crossle's CrossleStatsExtension is not copied
+/Src/Main/Src/Features/Stats/Extensions/*
+# ports, DB name, JWT, hosts
+/Src/Main/Resources/Configs/
+/Src/Main/Properties/launchSettings.json
+/Src/Main.Test/appsettings.Test.json
+# migrations are per database: a twin starts from 0000_create_database + 0001_baseline_schema + its seeds (card-platform D15);
+# Repeatable/ (procedures, triggers) stays shared
+/Src/Main/Resources/Migrations/Versioned/
+# image + compose carry the port and container names
+/Docker/
+# Crossle's ad-hoc analytics queries
+/QueryDump/

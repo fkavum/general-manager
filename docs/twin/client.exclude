@@ -1,0 +1,46 @@
+#@upstream=dcm-client
+#@dest=.
+# card-platform twin manifest (master: general-manager/docs/twin/client.exclude) — the per-app paths of a dcm-client twin
+# (one twin repo per store app: batak-client, pisti-client …). Everything not listed here is overwritten by
+# twin/sync-upstream.sh. Never edit a synced path on a twin: change dcm-client and re-sync. A twin-only file must live
+# under one of these paths. rsync patterns, anchored at the dcm-client root. Folder lines need their .meta twin.
+# Drafted before P1c (client AppCore extraction); P1c finalises the Addressables and Editor lines.
+
+# the game folder: Crossle's is not copied; add the twin's own below it (never deleted)
+/Assets/DontCrossMe
+/Assets/DontCrossMe.meta
+# twin game folder — e.g. for batak-client:
+#/Assets/Batak
+#/Assets/Batak.meta
+
+# app identity, servers, store catalog, build stamp
+/Assets/Resources/AppConfig*.json
+/Assets/Resources/AppConfig*.json.meta
+/Assets/Resources/IAPProductCatalog.json
+/Assets/Resources/IAPProductCatalog.json.meta
+/Assets/Resources/buildInfo.json
+/Assets/Resources/buildInfo.json.meta
+/ProjectSettings/ProjectSettings.asset
+/ProjectSettings/EditorBuildSettings.asset
+/user_keystores/
+
+# Firebase / Google services are per app id
+/Assets/google-services.json
+/Assets/google-services.json.meta
+/Assets/GoogleService-Info.plist
+/Assets/GoogleService-Info.plist.meta
+/Assets/StreamingAssets/google-services-desktop.json
+/Assets/StreamingAssets/google-services-desktop.json.meta
+/Assets/GeneratedLocalRepo
+/Assets/GeneratedLocalRepo.meta
+/ProjectSettings/AndroidResolverDependencies.xml
+
+# Addressables: group list + content state are per app until P1c splits shared vs game groups
+/Assets/AddressableAssetsData/AddressableAssetSettings.asset
+/Assets/AddressableAssetsData/AssetGroups/
+/Assets/AddressableAssetsData/Android/
+/Assets/AddressableAssetsData/Windows/
+
+# stray files tracked by dcm-client that no twin wants
+/fbg.log
+/mono_crash.mem.*

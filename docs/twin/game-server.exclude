@@ -1,0 +1,24 @@
+#@upstream=dcm-game-server
+#@dest=game-server
+# card-platform twin manifest (master: general-manager/docs/twin/game-server.exclude) — the per-app paths of a
+# dcm-game-server twin. Everything not listed here is overwritten by twin/sync-upstream.sh. Never edit a synced path on a
+# twin: change dcm-game-server and re-sync. A twin-only file must live under one of these paths.
+# rsync patterns, anchored at the dcm-game-server root.
+
+# app wiring — which game module and feature modules this server runs
+/DcmGameServer/Src/AppBootstrapper.cs
+# one folder per game: CrossWord/ is Crossle's and is not copied; the twin's (Batak/, …) is never deleted
+/DcmGameServer/Src/GameModules/*
+# ports, hosts, Redis, bot pool, lobby config + Crossle's level data (Levels/, OfflineLevelGuide.csv)
+/DcmGameServer/Resources/
+/DcmGameServer/Properties/launchSettings.json
+# compose carries the ports and container names; Docker/Dockerfile is shared
+/Docker/docker-compose.yml
+# Crossle's legacy NUnit fixtures compiled into the server binary (LobbyTest, LevelModelTest reference CrossWord)
+/DcmGameServer/Src/Core/Scripts/Editor/Tests/Game/
+# Crossle's game tests + their data; engine/feature tests (Lobby/, Features/, Handlers/, Netty/, Protocol/, LoadBot/) are shared
+/DcmGameServer.Tests/Game/
+/DcmGameServer.Tests/TestData/
+# the twin's own game tests and LoadBot personas/scenarios live here (new folders, never synced)
+/DcmGameServer.Tests/GameModules/
+/DcmGameServer.LoadBot/Games/

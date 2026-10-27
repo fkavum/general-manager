@@ -32,9 +32,9 @@ dcm-manager, racer-web. Paths relative to `/Users/fkavum/Documents/project/`.
 | # | Question | Proposal |
 |---|---|---|
 | D1 | Dirty-tree behaviour | Refuse (exit 1), `--allow-dirty` escape hatch that stamps `DIRTY` into the lock. |
-| D2 | Root `HttpShared/` | Delete after the generator writes directly into the targets; dcm-manager intro's "Output: `../HttpShared/` (outside all repos)" line changes. |
+| D2 | Root `HttpShared/` | Delete after the generator writes directly into the targets; dcm-manager intro's "Output: `../HttpShared/` (outside all repos)" line changes. ✅ owner 2026-10-27 — folder deleted the same day (the generator writes direct since card-platform P1b). |
 | D3 | Masters' new home | `general-manager/docs/web/` (next to `docs/app-icons/`, same "control from general-manager" idea). |
 | D4 | H8 strays | Delete the pub log + `error`; move `migrationguide.md`; JSON files untouched unless told. |
-| D5 | Topology rule | Monorepo for new apps; existing untouched. |
+| D5 | Topology rule | Monorepo for new apps; existing untouched. Applied first by card-platform (2026-10-27): backend mono repo `card/card-backend`, only the Unity client separate. |
 
 Effort: ≈ 1 day total; H7 is half of it.

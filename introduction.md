@@ -46,6 +46,7 @@ Adding an app: take the next free `NN`, add a row to the app table above and to 
 
 Same convention as the app managers: multi-project features get a folder `general-manager/implementations/{feature}/`
 with per-project notes and a `session_progress.md`. Move to `implementation-done/` when finished.
+Current: `implementations/card-platform/` — Batak as the first game on a Crossle twin backend (app 06, `card/card-backend` mono repo + `card/batak-client`): upstream seams (lobby = game variant, `user_game`, client AppCore), `docs/twin/sync-upstream.sh` exclude-manifest twins, then boilerplate + Batak MVP. D1–D16 decided; P1a, P1b, P1d done 2026-10-27; next P2 + P1c.
 Current: `implementations/port-scheme/` — the migration to the `2NNRR` scheme.
 Current: `implementations/common-legal-pages/` — one privacy policy / terms / delete-account / support set on
 `dcxstudios.org/apps/…` (`privacy_policy`, `terms`, `delete_account`, `support`; publisher "Mehmet Fatih Kavum, trading as Dcx Studios") for the small apps, shared body + one section per app from a `legal`
@@ -61,6 +62,17 @@ Done 2026-09-25: `implementation-done/identity-core/` — one `Identity` + one `
 provider and enricher modules, Crossle's clients untouched (contract test); prerequisite of hunter's `auth-upstream`.
 Done 2026-09-24: `implementation-done/upstream-ownership/` — one upstream (dcm-web), one owner per shared web module,
 `sync-dcm-features.sh`, hosted-not-wired modules (`NOT_USED_BY_CROSSLE.md` → `Src/Main.Hosted`).
+
+## Crossle twins (card games)
+
+Every tool script across the projects (launchers, repo sync, upstream→downstream sharing, build/test/bench, twins, gates,
+legacy ops) is listed with its arguments in `docs/scripts-catalogue.md` (2026-10-27).
+
+Decided and tooled 2026-10-27, details in `docs/twin/README.md`: a twin is a full copy of a Crossle repo (dcm-web,
+dcm-game-server, dcm-client) where only the paths in `docs/twin/<kind>.exclude` differ. `twin/sync-upstream.sh` (copy of
+the master) syncs with `rsync --delete`, refuses a dirty upstream, writes `twin/upstream.lock.md`; `--check` is the build
+gate. Never edit a synced path on a twin — change the upstream and re-sync. Backend twins live in one mono repo
+(`card/card-backend/{web,game-server,docker,manager,twin}`), each store app's Unity twin in its own repo (`card/batak-client`).
 
 ## App icons (Flutter clients)
 
