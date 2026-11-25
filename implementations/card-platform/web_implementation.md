@@ -20,7 +20,10 @@ gains `user_game` (the test reset did not know the table), `PublicProfileMedalsT
 | W6 ✅ | `Features/Stats`: `AddStatsModule<TExtension>()` registers the app's extension on the existing `IStatsUpdateObserver` seam (no new interface); `Features/Stats/Extensions/CrossleStatsExtension` (empty) wired in `AppModules` — the one per-app file of the Stats module. | `Features/Stats/{StatsModule.cs,Extensions/CrossleStatsExtension.cs}`, `BootStrapper/AppModules.cs` |
 | W7 ✅ | Tests as above. No route baseline exists in dcm-web (only downstreams carry `Baselines/routes.txt`). | `Src/Main.Test` |
 
-Deferred to the second card game (recorded in `overview.md` §2/D16): **provider-login scoping without a new column** (lookup
+**2026-10-28 (second game, Pişti):** `GameMembershipController.Set` answers the recorded membership (`GameMembershipData`, the first game
+wins) instead of `"Success"`, so the game server can follow the uid's real game on every card login (the aggregate alone cannot tell a
+recorded game from the per-app default); `GameMembershipWireTest` updated. Still deferred to a later pass (the Pişti MVP runs on anonymous
+logins): **provider-login scoping without a new column** (lookup
 joins `user_game` for the requesting game, unique key → `(provider, social_id, uid)`, `GameId` in provider login/attach bodies);
 leaderboard join on `user_game` for the requester's game + per-game season schedule key; `data_min_versions` / `data_supported_logins`
 per app; bot rows in `user_game`.

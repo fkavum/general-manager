@@ -6,12 +6,12 @@ repos are cloned.
 
 ```
 <project>-manager/tools/bash/sync/sync.sh <branch> [--dry-run] [--yes] [--only=a,b] [--no-fetch]
-dcm-manager/tools_v2/bash/sync/sync.sh dev      # DCM lives in tools_v2, tools/ is left alone
+dcm-manager/tools/bash/sync/sync.sh dev
 ```
 
 | wrapper | repos (`repos.sh`) |
 |---|---|
-| `dcm-manager/tools_v2/bash/sync` | general-manager, dcm-manager, dcm-docker, bash-scripts, dcm-web, dcm-game-server, dcm-generator, dcm-admin, dcm-dict, dcxstudios-website, dcm-client |
+| `dcm-manager/tools/bash/sync` | general-manager, dcm-manager, dcm-docker, bash-scripts, dcm-web, dcm-game-server, dcm-generator, dcm-admin, dcm-dict, dcxstudios-website, dcm-client |
 | `testapp/hunter-manager/tools/bash/sync` | general-manager, testapp, dcm-docker, dcm-web |
 | `flash/flash-manager/tools/bash/sync` | general-manager, flash, dcm-docker, dcm-web, testapp |
 | `tapit/tapit-manager/tools/bash/sync` | general-manager, tapit, dcm-docker, dcm-web, testapp |

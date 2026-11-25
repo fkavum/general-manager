@@ -14,7 +14,7 @@ synced subtrees, so one script serves every kind of a repo.
 | Behaviour | Detail |
 |---|---|
 | Source | upstream found as the first ancestor folder containing `dcm-web` (or `--upstream-root DIR`); `#@upstream=` in the manifest names the repo, `#@dest=` the subfolder (`web`, `game-server`, `.` for the client). Dirty upstream → exit 1 with the `git status` list (H1); `--allow-dirty` stamps `DIRTY(n)`; not on `dev` → warning. |
-| Copy | `rsync -rlt --delete` with two exclude lists: the manifest, and a generated one = `.git`, `.gitmodules`, `.idea`, `twin/`, `.DS_Store`, every submodule path, every path the upstream gitignores (`git status --ignored`). Excluded = neither copied nor deleted. Submodules are pinned by git on the twin, never copied. |
+| Copy | `rsync -rlt --delete` with two exclude lists: the manifest, and a generated one = `.git`, `.gitmodules`, `.idea`, `twin/`, `.DS_Store`, every submodule path, every path the upstream gitignores (`git status --ignored` plus the root `.gitignore` patterns themselves — an ignored folder that is empty at that moment, e.g. `Temp/` of a closed editor, is not listed by git; 2026-10-28). Excluded = neither copied nor deleted. Submodules are pinned by git on the twin, never copied. |
 | Lock | `twin/upstream.lock.md`: one row per kind — upstream, branch, commit, clean/DIRTY(n), submodule commits, UTC time, manifest md5. |
 | `--check` | `rsync --checksum --dry-run --itemize-changes` minus attribute-only lines, plus a submodule-commit compare → non-empty = exit 1 with the list. The build gate of every twin. |
 | `--init` | empty destination (only `twin/`, `.git` allowed), copies the master manifest when missing, syncs, prints the per-app paths (the manifest's own lines) and the `git submodule add … && checkout <commit>` commands. No git operation is run by the script. |
@@ -53,6 +53,10 @@ Crossle's and is not copied). Dokploy app `card-web` with target port 20600, bui
   dockerfile `Docker/Dockerfile` — shared with Crossle, it carries no port), networks `dcx-network` (external) +
   `dokploy-network`; logs `/opt/log/card/{web,game}`; `.env.local/.ubuntu`.
 - `common-infra` gains `dcx-redis-container` (`${REDIS_PORT:-20011}:6379`, password, maxmemory) — D13.
+- Process names of the source runs: `card/card-backend/Directory.Build.props` (repo root — outside `web/`, `game-server/` and the
+  Docker contexts) sets `AssemblyName` `CardWeb` for `Main` and `CardGameServer` for `DcmGameServer`, so a local card process is
+  never mistaken for Crossle's `DcmCoreWeb` / `DcmGameServer` (2026-10-27). Upstream `Main.csproj` keeps `DcmCoreWeb` unless a
+  different name was pre-set; images and Dockerfiles unchanged.
 - The web image's `Docker/Main/Dockerfile` hardcodes `ASPNETCORE_HTTP_PORTS` (20100) → per-app copy with 20600 (manifest
   excludes `web/Docker/`). Optional upstream tweak later: `ARG WEB_PORT` so the Dockerfile becomes shared too.
 
@@ -74,7 +78,7 @@ Rule written into the intro: **never edit a synced path on a twin** — change u
 the manifest is a bug (same sentence as the web ownership rule). `twin/sync-upstream.sh --check` is the first line of
 every card build script.
 
-## 5. Repo creation checklist (P2)
+## 5. Repo creation checklist (P2) — done 2026-10-27, see `session_progress.md` (P2 row) and `card/card-backend/manager/introduction.md`
 
 1. Write ports (§2) → `PORTS.md`, intro apps table (`06 | Card`), H9 line "card = mono repo `card-backend` + one Unity repo per store app".
 2. `mkdir card/card-backend/twin && cp general-manager/docs/twin/sync-upstream.sh card/card-backend/twin/`;

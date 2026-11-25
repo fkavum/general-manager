@@ -9,9 +9,20 @@
 # the game folder: Crossle's is not copied; add the twin's own below it (never deleted)
 /Assets/DontCrossMe
 /Assets/DontCrossMe.meta
-# twin game folder — e.g. for batak-client:
-#/Assets/Batak
-#/Assets/Batak.meta
+# twin game folder — the twin writes its own lines, e.g. batak-client /Assets/Batak, pisti-client /Assets/Pisti (+ .meta):
+#/Assets/<Game>
+#/Assets/<Game>.meta
+
+# the twin's own socket DTOs, exported by its game server (card-backend/game-server/Tools/generate-socket-shared.sh
+# --game=<G> --client-dir=…): SocketShared/Game/<G> is not in dcm-client, so it must be protected from --delete — the twin
+# writes its own lines (batak-client Game/Batak, pisti-client Game/Pisti, + .meta)
+#/Assets/SharedData/SocketShared/Game/<G>
+#/Assets/SharedData/SocketShared/Game/<G>.meta
+
+# per-app assets that shared scenes/prefabs reference by GUID (item icons, reward view database, splash + booster art):
+# a twin ships its own files with the same GUIDs (card-platform P1c, dcm-client Docs/AI_RULES.md)
+/Assets/AppData
+/Assets/AppData.meta
 
 # app identity, servers, store catalog, build stamp
 /Assets/Resources/AppConfig*.json

@@ -14,6 +14,7 @@ All paths are relative to `/Users/fkavum/Documents/project/`.
 | 03 | Flash | deployed API, PWA not yet | `flash/flash-web`, `flash/client` (Flutter PWA) | `flash/flash-manager/introduction.md` |
 | 04 | Tapit | not deployed | `tapit/tapit-web`, `tapit/tapit-client` (Flutter PWA) | `tapit/tapit-manager/introduction.md` |
 | 05 | Racer | local only | `racer-web`, `racer` (Unity) | `racer/racer-manager/introduction.md` |
+| 06 | Card (Batak, Pişti) | local MVPs (Batak 2026-10-27, Pişti 2026-10-28; not deployed) | `card/card-backend` (mono repo: `web` + `game-server` = Crossle twins, `docker`, `manager`, `twin`), `card/batak-client`, `card/pisti-client` (Unity twins of dcm-client) | `card/card-backend/manager/introduction.md` |
 
 ## Ports
 
@@ -29,11 +30,13 @@ See **[PORTS.md](PORTS.md)** — the only authoritative list. Summary of the sch
 
 Adding a service: pick the role offset, write it in `PORTS.md` first, then wire compose → bind → consumers → Dokploy target → Prometheus → docs (checklist at the bottom of `PORTS.md`).
 
-Adding an app: take the next free `NN`, add a row to the app table above and to `PORTS.md`.
+Adding an app: take the next free `NN`, add a row to the app table above and to `PORTS.md`. Topology (sharing-hygiene H9): a new
+app is a mono repo `<app>/{<app>-web,<app>-client,<app>-manager}`; a **Crossle twin** (card games) is a backend mono repo
+`<app>/<app>-backend/{web,game-server,docker,manager,twin}` plus one Unity repo per store app next to it (`docs/twin/README.md`).
 
 ## Shared infrastructure facts
 
-- `dcx-mysql-container` (host 20010 → 3306, network `dcx-network`) is the one shared MySQL; each app creates its own database in its migration 0000. It is **not** the Crossle game DB (`dcm-mysql-container`, host 20110, network `dcm-network`).
+- `dcx-mysql-container` (host 20010 → 3306, network `dcx-network`) is the one shared MySQL; each app creates its own database in its migration 0000 (card-web: DbUp's `EnsureDatabase` + `0001_baseline_schema`). It is **not** the Crossle game DB (`dcm-mysql-container`, host 20110, network `dcm-network`). `dcx-redis-container` (host 20011 → 6379, same stack, since 2026-10-27) is the shared Redis of the non-Crossle apps; Crossle keeps `dcm-redis-container` 20111.
 - Public HTTPS for every web service goes through Dokploy's Traefik on `dokploy-network`. Dokploy stores the **target container port** in its UI; it is not in any repo, so a port move needs a manual Dokploy edit.
 - The Ubuntu host nginx (`bash-scripts/apps/dcm_ubuntu/nginx`) still fronts Crossle: TCP stream `2303 → 20101`, HTTP vhosts → `20100`.
 - Prometheus config lives in `dcm-docker/Grafana/prometheus.yml`; every metrics port change goes there too.
@@ -46,12 +49,12 @@ Adding an app: take the next free `NN`, add a row to the app table above and to 
 
 Same convention as the app managers: multi-project features get a folder `general-manager/implementations/{feature}/`
 with per-project notes and a `session_progress.md`. Move to `implementation-done/` when finished.
-Current: `implementations/card-platform/` — Batak as the first game on a Crossle twin backend (app 06, `card/card-backend` mono repo + `card/batak-client`): upstream seams (lobby = game variant, `user_game`, client AppCore), `docs/twin/sync-upstream.sh` exclude-manifest twins, then boilerplate + Batak MVP. D1–D16 decided; P1a, P1b, P1d done 2026-10-27; next P2 + P1c.
+Current: `implementations/card-platform/` — Batak as the first game on a Crossle twin backend (app 06, `card/card-backend` mono repo + `card/batak-client`): upstream seams (lobby = game variant, `user_game`, client AppCore), `docs/twin/sync-upstream.sh` exclude-manifest twins, then boilerplate + Batak MVP. D1–D16 decided; P1a, P1b, P1d, P2 done 2026-10-27 (repos exist, boot locally on 206xx); next P1c, then P3 Batak MVP.
 Current: `implementations/port-scheme/` — the migration to the `2NNRR` scheme.
 Current: `implementations/common-legal-pages/` — one privacy policy / terms / delete-account / support set on
 `dcxstudios.org/apps/…` (`privacy_policy`, `terms`, `delete_account`, `support`; publisher "Mehmet Fatih Kavum, trading as Dcx Studios") for the small apps, shared body + one section per app from a `legal`
 content collection; racer first, flash/hunter when they ship, Crossle keeps its own policy/terms but joins the delete page (blocked on a real performed delete in dcm-web), Tapit (B2B) excluded; contact `dcxstudios@gmail.com`.
-Machine sync (2026-10-01, `bash/sync/README.md`): `<manager>/tools/bash/sync/sync.sh <branch>` (DCM: `tools_v2/`)
+Machine sync (2026-10-01, `bash/sync/README.md`): `<manager>/tools/bash/sync/sync.sh <branch>`
 resets every repo of that app, including infra (`dcm-docker`) and submodules, to `origin/<branch>`. It reports first and asks before nuking.
 Done 2026-09-27: `implementation-done/flutter-core/` — the shared Flutter package `dcx_flutter_core` (Hunter upstream,
 flash/tapit vendored + `tool/sync-flutter-core.sh`), adopted by all three clients; see "Flutter clients" below.
@@ -72,7 +75,7 @@ Decided and tooled 2026-10-27, details in `docs/twin/README.md`: a twin is a ful
 dcm-game-server, dcm-client) where only the paths in `docs/twin/<kind>.exclude` differ. `twin/sync-upstream.sh` (copy of
 the master) syncs with `rsync --delete`, refuses a dirty upstream, writes `twin/upstream.lock.md`; `--check` is the build
 gate. Never edit a synced path on a twin — change the upstream and re-sync. Backend twins live in one mono repo
-(`card/card-backend/{web,game-server,docker,manager,twin}`), each store app's Unity twin in its own repo (`card/batak-client`).
+(`card/card-backend/{web,game-server,docker,manager,twin}`), each store app's Unity twin in its own repo (`card/batak-client`, `card/pisti-client`).
 
 ## App icons (Flutter clients)
 

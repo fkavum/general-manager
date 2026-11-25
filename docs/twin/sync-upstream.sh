@@ -137,6 +137,9 @@ for kind in "${kinds[@]}"; do
     printf '%s\n' '/.git' '/.gitmodules' '.git' '/twin' '/.idea' '.DS_Store'
     for p in "${sub_paths[@]:-}"; do [ -n "$p" ] && printf '/%s\n' "$p"; done
     git -C "$src" status --ignored --porcelain=v1 | sed -n 's|^!! |/|p'
+    # the upstream's own ignore rules as well: an ignored folder that happens to be empty right now (Temp/ of a closed
+    # editor) is missing from `git status --ignored`, yet the twin's copy of it must still be left alone
+    if [ -f "$src/.gitignore" ]; then sed -n '/^[^#!]/p' "$src/.gitignore" | sed 's/[[:space:]]*$//' | grep -v '^$' || true; fi
   } > "$ign"
   rsync_args=(-rlt --delete --exclude-from="$manifest" --exclude-from="$ign")
 

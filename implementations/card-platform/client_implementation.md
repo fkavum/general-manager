@@ -3,7 +3,7 @@
 Paths relative to `dcm-client/Assets/`. Map source: read-only scan 2026-10-27. Unity 6000.0.60f1, no first-party asmdefs.
 Decisions applied: D9 (generic → `GameComponents/`), D10, D11 (one client repo per store app, proposed), D14 (runs on `dev` now).
 
-## 1. Upstream extraction (P1c) — a pure move, no behaviour change
+## 1. Upstream extraction (P1c) — a pure move, no behaviour change — **implemented 2026-10-27** (see `session_progress.md` P1c row; C6 group split deferred, validators pending the editor)
 
 | # | Today | Change |
 |---|---|---|
@@ -32,7 +32,7 @@ the CCG submodule is pinned by git on the twin. Dry run: 1.3 GB synced, every pe
 Found on the way (→ C5): `GameComponents/Store/StoreController.cs` and `Store/iap/IAPManagerOld.cs` hardcode
 `com.dcxstudios.dcm` — the bundle id must come from `buildInfo.json`/`AppConfig` before the twin can build a store release.
 
-## 3. `GameComponents/CardKit` (upstream, P3) and `Assets/Batak` (twin, P3)
+## 3. `GameComponents/CardKit` (upstream, P3) and `Assets/Batak` (twin, P3) — **built 2026-10-27**: CardKit = generated card sprites (`Sprites/Cards`, 52 + back, metas with fixed GUIDs), `CardCodec`, `CardSpriteSet`, `CardView`, `HandFanView`, `TrickAreaView`, `SeatView` (with the turn ring), `BidPanelView`, `TrumpPanelView`, `CardTableLayout`, `Editor/CardKitBuilder` + `Cli/CardKitCli` (`cardkit_build`, `cardkit_validate`; prefabs are built in the twin's batch editor and copied upstream); batak-client `Assets/Batak` = `BatakModel`, `BatakRules` (client copy of the legality rules), `BatakGameController : IGameController`, `Handlers/` (500–505 + snapshot, `BatakSceneFlow` enters the Game scene), `BatakClientGameModule`, `UI/BatakPlayPage`, `UI/BatakEndGamePopup`, `Editor/BatakSceneBuilder` + `Cli/BatakCli` (`batak_build`, `batak_validate`, batch `-executeMethod Batak.Editor.Cli.BatakCli.BuildAll`): Game.unity (overlay canvas 1125×2436 + table + controller), Lobby.unity (copy of dcm-client's lobby, crossword pages/tab removed, Batak Play page second, 4 pages / 4 tabs), Addressables (`EndGamePopup`, `Lobby`, `Game`, `BatakPage_Play Page`; crossword entries pruned), build list (Main enabled, Lobby/Game disabled — they load through Addressables). **2026-10-28:** page prefabs with their own canvas need a `GraphicRaycaster` (Crossle's have one; the Batak page did not → Play not clickable); `BuildAll` ends on Main because play mode must start there (EventSystem, camera, popup canvases); Crossle's meta progression ships on the twin — `DcmPage_Album Page.prefab` (the Puzzle tab) now lives upstream in `GameComponents/MetaProgression/PuzzleProgress/Prefab`, the twin lobby keeps Crossle's Shop / Puzzle / Play / Board / Friends order and only the crossword Play page is swapped, `BatakClientGameModule` registers `PuzzleProgressModule.RegisterLive`, the Play page carries the "Find a piece!" shortcut and the end popup the `ItemIconDatabase` reward row; card web seeds the puzzle cities (migration 0003).
 
 | Piece | Where | Content |
 |---|---|---|
@@ -41,3 +41,14 @@ Found on the way (→ C5): `GameComponents/Store/StoreController.cs` and `Store/
 | Scene `Scene/Game/Game.unity` | `Assets/Batak/` | `CardTableLayout` + Batak controllers (`BatakGameController : IGameController`, `BidController`, `HandController`), reconnect via snapshot payload |
 | Editor | `Assets/Batak/Editor/` | `BatakTableBuilder` + `Cli/BatakTableCli` (`unity command batak_table_build|validate`), HeartStats-builder shape |
 | Store | ProjectSettings (twin) | product "Batak", bundle `com.dcxstudios.batak`; icons via `general-manager/docs/app-icons/` pipeline (Unity adoption = open point) |
+
+## 4. `card/pisti-client` (twin, second game — 2026-10-28)
+
+Same shape as §3 on a second dcm-client twin (`docs/twin/README.md` "Second client twin"): `Assets/Pisti` = `PistiModel`,
+`PistiGameController` (every card in hand is legal: input = "my turn"), `Handlers/` (600–603 + snapshot, `PistiSceneFlow`),
+`PistiClientGameModule` (registers Crossle's Puzzle Progress like Batak), `UI/PistiTableView` (a two-seat table built on CardKit's
+`CardView` / `SeatView` / `HandFanView`: my hand, the opponent's face-down cards, the pile = top card + under card + count with
+play / capture tweens, deck count), `UI/PistiPlayPage`, `UI/PistiEndGamePopup` (2 rows + the reward row), `Editor/PistiSceneBuilder` +
+`Cli/PistiCli` (`pisti_build`, `pisti_validate`; CardKit's prefabs are only validated, never rebuilt — a rebuild regenerates fileIDs and
+drifts the synced prefab). `AppConfig*.json` GameId 3 → lobby 301. Per-app files copied from batak-client; details and the smoke in
+`card/card-backend/manager/implementations/pisti-mvp/session_progress.md`.

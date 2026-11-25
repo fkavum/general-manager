@@ -42,7 +42,8 @@ Rules
 | 03 | Flash | 20300–20399 | `flash/flash-manager/introduction.md` |
 | 04 | Tapit | 20400–20499 | `tapit/tapit-manager/introduction.md` |
 | 05 | Racer | 20500–20599 | `racer/racer-manager/introduction.md` |
-| 06–99 | free | | |
+| 06 | Card (Batak, later Pişti/King — one backend, one Unity app per game) | 20600–20699 | `card/card-backend/manager/introduction.md` |
+| 07–99 | free | | |
 
 ## Allocations
 
@@ -78,6 +79,33 @@ Rules
 | Tapit | PWA dev server / PWA container | 20421 | was 8090 (collided with Hunter) |
 | Racer | racer-web (API) | 20500 | was 5089. Uses the shared MySQL (20010); racer has no DB container of its own since 2026-09-11 |
 | Racer | Unity client → API | 20500 | serialized default in Boot scene |
+| Card | card-web (API) | 20600 | `card/card-backend/web`, DB `card` in the shared MySQL (20010) |
+| Card | game server TCP | 20601 | `card-game-container`; no legacy alias, no host nginx stream |
+| Card | game server WebSocket `/ws` | 20602 | |
+| Card | Unity client default / WebGL host | 20620 | batak-client, pisti-client (one card client at a time locally; a hosted WebGL per app would need its own port) |
+| Card | card-web Prometheus metrics | 20630 | `/metrics` of the API |
+| Card | game server Prometheus metrics | 20631 | AppConfig `Metrics.Port` |
+| Common | dcx-redis-container (shared Redis) | 20011 → 6379 | added 2026-10-27 for card (card-platform D13); DB index per app; Crossle keeps dcm-redis-container 20111 |
+
+## VPS firewall — inbound rules
+
+Only these ports are opened in the VPS / provider network firewall. All web APIs, PWAs, admin and Grafana are reached by hostname
+through Traefik on 80/443. MySQL, Redis, metrics and Prometheus stay closed (host / docker-network only).
+
+| Port | Proto | For | Status |
+|---|---|---|---|
+| 22 | TCP | SSH | open |
+| 80 / 443 | TCP | Traefik (every web service, Dokploy-routed) | open |
+| 2303 | TCP | DCM game server TCP, legacy alias of 20101 (shipped Unity builds) | open until old builds retire |
+| 2306 | TCP | DCM game server WS, legacy alias of 20102 | open until old builds retire |
+| 20101 | TCP | DCM game server TCP | open |
+| 20102 | TCP | DCM game server WebSocket `/ws` | open |
+| 20601 | TCP | Card game server TCP | open when card is deployed |
+| 20602 | TCP | Card game server WebSocket `/ws` | open when card is deployed |
+
+Do **not** open: 200x0–200x4 APIs (Traefik fronts them), 20010/20011/20110/20111 (DBs), 20030–20035 and every `x3x` metrics port,
+20005 (Traefik dashboard), 8080 (old nginx status, now 20035). Docker-published ports bypass `ufw` on the host, so the
+provider-level firewall is the rule that actually keeps these closed.
 
 ## Retired / legacy numbers (do not reuse for anything else)
 

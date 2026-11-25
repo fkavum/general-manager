@@ -22,6 +22,7 @@ baseline before the change 432 / 429 / 3. New tests: `Lobby/LobbyConfigurationTe
 | S7 — | `X-Game-Id` header | Dropped (membership model). | — |
 | S8 ✅ | Crossword DTOs next to generic ones | `MessageId.cs` comments reserve 100–199 CrossWord, 500–599 Batak, 600–699 Pişti, 700–799 King. `git mv` of the 12 crossword payload DTOs (`Cross*`, `EmptyCross*`, `ExtraWord*`, `LetterDto`, `GameInfoDto`, `PlayerScoresDto`) + `.meta` into `Dtos/Socket/Game/CrossWord/` in **both** CCG checkouts; namespaces unchanged. Requests/responses stay where they are (the id blocks organise them). | CCG `Enums/MessageId.cs`, `Dtos/Socket/Game/CrossWord/*` |
 | S9 ✅ | Lobby/room/friend tests import `CrossWord` | P1d 2026-10-27: the unused `using DcmGameServer.GameModules.CrossWord;` removed from the 7 `Lobby/` tests, 2 `Features/` tests and `Helpers/TestDataBuilder.cs` (its `CreateTestCrossDto` only uses CCG DTOs); the five tests that mocked `IGame.Model` with `new GameModel()` (a CrossWord type) now use `Mock.Of<IGameModel>()`. Suite unchanged: 443 pass / 3 known. The twin therefore compiles `Lobby/ Features/ Handlers/ Netty/ Protocol/ LoadBot/` (125 tests) without any game module. | `DcmGameServer.Tests/{Lobby,Features,Helpers}/*` |
+| S11 ✅ | LoadBot per game (P2 found it: the twin's `GameServer.sln` builds the LoadBot, whose personas/parsers named crossword DTOs) | `DcmGameServer.LoadBot/Games/CrossWord/{GameLoop,IPlayPolicy,CrossWordPersonas}.cs` (namespaces kept); generic `Personas/GamePersonas.cs` registry + `ProtocolSurface.Register()`, filled from a `[ModuleInitializer]` in the game's folder (Player/LobbySearcher/Leaver, StartRound/TurnChange/GamePlay/GameSnapshot); tests: `Tests/GameModules/CrossWord/LoadBot/` (`CrossWordProtocolTests`, `DictionaryIndexTests`, namespace `Tests.LoadBot.CrossWord` — a `Tests.GameModules` namespace would shadow `GameModules.CrossWord.Game` for `Tests/Game/*`), `Tests/Helpers/TestDataBuilder` partial with the crossword builder in `Tests/Game/TestDataBuilder.CrossWord.cs`. A twin registers its own persona + parsers from `Games/<G>/` (manifest line). | `DcmGameServer.LoadBot/{Personas,Protocol,Games/CrossWord}`, `DcmGameServer.Tests/{LoadBot,GameModules/CrossWord,Game,Helpers}` |
 | S10 🔲 | `DcmGameServer/Src/Core/Scripts/Editor/Tests/Game/{LobbyTest,LevelModelTest}.cs` are NUnit fixtures compiled into the **server binary** and reference CrossWord; `DcmGameServer.Tests/Game/UserModelTests.cs` is generic but lives in Crossle's test folder | Not touched (AI_RULES). The twin manifest excludes the folder; the clean upstream fix is moving the two fixtures to `DcmGameServer.Tests/Game/` (or `Compile Remove`) and `UserModelTests` to `Tests/Features/` — owner's call. | `DcmGameServer/DcmGameServer.csproj`, `DcmGameServer.Tests/Game/UserModelTests.cs` |
 
 Crossle-side notes for dcm-manager: lobby ids on the wire are now 101/102 (the client never reads them); `dcm_game` lobby metrics
@@ -37,6 +38,18 @@ Per-app: `DcmGameServer/Src/AppBootstrapper.cs`, `DcmGameServer/Src/GameModules/
 `DcmGameServer.LoadBot/Games/`. The CCG submodule is pinned by git on the twin, not copied (`--check` compares the commits).
 Dry run: the twin builds with `GameModules/Stub` (`StubGameModule.Register()` = `GameConfig` + factory + one lobby 201 / Batak /
 4 seats; `StubGame : IGame` no-op) and its tests run 125 pass / 3 known (the same three as upstream).
+
+## 3a. Second game on the same server — `GameModules/Pisti` (2026-10-28, `card/card-backend/manager/implementations/pisti-mvp/`)
+
+One card server runs both modules: `AppBootstrapper` sets `GameConfig` once, calls `BatakGameModule.Register()` + `PistiGameModule.Register()`
+(config + factory each), sets the one `LobbyConfiguration` from `Batak.Lobbies() ∪ Pisti.Lobbies()` (201, 301) and registers both handler
+sets (GameSnapshot 15 once — the room's own game answers it). Found by the second game, fixed upstream (Crossle-safe): the login handler
+only recorded a card user's game when the aggregate said `None`, but a card web answers its per-app default (Batak) for every uid without
+a row — a Pişti user never got a row and landed in the Batak lobby. Now a card client calls `game_membership/set` at every login and dcm-web
+answers the **recorded** membership (set-if-absent, the first game wins), which the server follows. LoadBot: `Scenario.GameId` in
+`LoginRequest`, per-game persona / parser registries (`RegisterForGame` + `UseGame`), `generate-socket-shared.sh --game=NAME`.
+Crossle-side notes for dcm-manager: `POST api/game_membership/set` now answers `GameMembershipData` instead of `"Success"` (the game
+server is its only caller, both changed together); Crossle scenarios keep `gameId` 0.
 
 ## 3. `GameModules/Batak` (P3 MVP)
 

@@ -1,7 +1,7 @@
 # general-manager/bash/lib — shared tooling, shell half
 
 One implementation of the local-run tooling, used by `flash-manager`,
-`hunter-manager`, `tapit-manager`, `racer-manager` and `dcm-manager/tools_v2`.
+`hunter-manager`, `tapit-manager`, `racer-manager` and `dcm-manager/tools`.
 Each of those has a runner folder that is **only** wrappers plus a description
 of itself; everything executable lives here.
 
@@ -37,9 +37,6 @@ general-manager/
 
 New tooling that is not the runner gets its own folder beside `runner/` on each
 side, and its shared code its own folder beside `lib/`.
-
-(`dcm-manager/tools` — the v1 layout — deliberately keeps its own private copy,
-for the side-by-side comparison in `dcm-manager/tools_v2/README.md`.)
 
 ## Layout
 

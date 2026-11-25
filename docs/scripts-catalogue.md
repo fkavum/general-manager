@@ -12,8 +12,8 @@ Groups: §1 launchers (run / stop / logs per project) · §2 repo sync (fresh ma
 
 Thin wrappers; the implementation is `general-manager/bash/lib/*.sh` (macOS/Linux) and `general-manager/cmd/lib/*.cmd`
 (Windows). A project declares what it consists of in `project.sh` / `project.cmd` next to the wrappers. Same wrapper set in
-`dcm-manager/tools_v2/bash/runner`, `racer/racer-manager/tools/bash/runner`, `flash/flash-manager/tools/bash/runner`,
-`tapit/tapit-manager/tools/bash/runner`, `testapp/hunter-manager/tools/bash/runner` (and `…/tools/cmd/runner/*.cmd`).
+`dcm-manager/tools/bash/runner`, `racer/racer-manager/tools/bash/runner`, `flash/flash-manager/tools/bash/runner`,
+`tapit/tapit-manager/tools/bash/runner`, `testapp/hunter-manager/tools/bash/runner`, `card/card-backend/manager/tools/bash/runner` (and `…/tools/cmd/runner/*.cmd`).
 `.run/` next to them holds the generated pane scripts and `run.log` — regenerated on every run, never edited.
 
 | Script (per project) | Arguments | Purpose |
@@ -36,8 +36,6 @@ Shared library behind them (`general-manager/bash/lib/`, Windows twins in `gener
 | `tailer.sh` | `<glob-with-%DATE%> [lines]` | Waits for log files to appear, then follows them; used inside log panes. |
 | `test-generate.sh` (`.cmd` + `test-generate.ps1` on Windows) | `[--update]` | Golden test of what the launcher *generates* (`.run/env.sh`, pane scripts) against `testdata/golden/`, with stub docker/dotnet/flutter. |
 
-Older Crossle-only launcher, kept until tools_v2 replaces it everywhere: `dcm-manager/tools/{run-docker,run-manual,stop,logs,test}.sh` (+ `.bat`) with the same flags minus `--with`, helpers in `dcm-manager/tools/lib/{common,waitport,tailer}.sh`.
-
 ## 2. Repo sync — "I just switched PCs" (`<app>-manager/tools/bash/sync/`)
 
 | Script | Arguments | Purpose |
@@ -53,7 +51,7 @@ Older Crossle-only launcher, kept until tools_v2 replaces it everywhere: `dcm-ma
 | Script | Arguments | Purpose |
 |---|---|---|
 | `dcm-web/Tools/generate-http-shared.sh` | `[--check] [client\|server\|all]` (default all) | Mirrors `Features/*/Contracts/**` + `HttpShared/Core/**` into `dcm-client/Assets/SharedData/HttpShared` (`.meta`-safe) and `dcm-game-server/…/SharedData/HttpShared`; `--check` = drift gate (exit 1). |
-| `dcm-game-server/Tools/generate-socket-shared.sh` | `[--check] [client]` | Mirrors every `Contracts/` folder of the game server into `dcm-client/Assets/SharedData/SocketShared` (`Engine/Contracts` → `Core`, `GameModules/<G>` → `Game/<G>`). |
+| `dcm-game-server/Tools/generate-socket-shared.sh` | `[--check] [client] [--client-dir=DIR] [--game=NAME]` | Mirrors every `Contracts/` folder of the game server into `dcm-client/Assets/SharedData/SocketShared` (`Engine/Contracts` → `Core`, `GameModules/<G>` → `Game/<G>`); a twin exports into its own client with `--client-dir`, and `--game` limits the `GameModules` part to one game (a card server hosting Batak + Pişti exports each into its own client, 2026-10-28). |
 | `dcm-generator/Tools/generate-generator-shared.sh` | `[--check] [client\|server\|all]` | Mirrors `Generator/Generator/Src/GeneratorShared/**` into `SharedData/GeneratorShared` of client and game server. |
 | `racer-web/Tools/generate-http-shared.sh` | `[client]` | racer's older counterpart: assembles `racer-web/HttpShared` from the feature `Contracts/` and, with `client`, syncs it into the racer Unity project (`.meta` preserved). |
 
@@ -81,14 +79,14 @@ Older Crossle-only launcher, kept until tools_v2 replaces it everywhere: `dcm-ma
 | `testapp/packages/dcx_flutter_core/tool/vendor.sh` | `sync\|check` | Upstream shortcut: runs the sync (or check) in every vendoring client. |
 | `testapp/packages/dcx_flutter_core/tool/templates.sh` | `apply\|check` | Pushes the byte-identical client files mastered under `templates/` (AI_RULES.md, Docker/nginx.conf, tool/sync-flutter-core.sh) into every client; `check` = sync gate. |
 
-## 4. Crossle build / test / bench (`dcm-game-server/Tools/`, `dcm-manager/tools_v2/`)
+## 4. Crossle build / test / bench (`dcm-game-server/Tools/`, `dcm-manager/tools/`)
 
 | Script | Arguments | Purpose |
 |---|---|---|
 | `dcm-game-server/Tools/run-tests.sh` | passes through to `dotnet test` | Runs `DcmGameServer.Tests` (`DcmGameServer/run-tests.sh` is a forwarder kept for old habits). |
 | `dcm-game-server/Tools/run-smoke.sh` | passes through to `run-bench.sh` (`DCM_DICT=` overrides the dictionary folder) | Protocol gate: two load bots play real games against the LOCAL stack (`--scenario=smoke.json --target=local`); run after any change to CCG, a `Contracts/` folder, `SharedData` or `GameModules`. |
 | `dcm-game-server/Tools/run-bench.sh` | `--scenario=<name.json\|/path> --target=local\|web=URL,game=host:port [--dict=DIR] [--prom=URL] [--out=DIR] [load-bot args]` | Runs one load-bot scenario; results in `bench-results/<utc>_<scenario>/`; exit 0 pass, 1 invariant failed, 2 bad args, 3 aborted. |
-| `dcm-manager/tools_v2/bash/bench/bench.sh` | `<target> [scenario …] [-- extra load-bot args]` (target `local\|prod\|web=…,game=…`; scenarios `smoke stability-mix web-ramp game-conn-ramp game-play-ramp soak-60m` or a file) | Runs a sequence of scenarios against one target and copies each summary next to the benchmarking plan. |
+| `dcm-manager/tools/bash/bench/bench.sh` | `<target> [scenario …] [-- extra load-bot args]` (target `local\|prod\|web=…,game=…`; scenarios `smoke stability-mix web-ramp game-conn-ramp game-play-ramp soak-60m` or a file) | Runs a sequence of scenarios against one target and copies each summary next to the benchmarking plan. |
 | `dcm-manager/implementations/android-bundle-optimization/measure-mem.sh` | `<label>` (boot, lobby, ingame, …) | Reads Play's memory metric (RssAnon + VmSwap) for Crossle off a connected Android device into `mem-log.csv`. |
 | `dcm-docker/crossle/win_execute.bat` | none | Windows one-click: compose build + up -d + logs -f for the crossle stack with `.env.local`. |
 
@@ -96,7 +94,7 @@ Older Crossle-only launcher, kept until tools_v2 replaces it everywhere: `dcm-ma
 
 | Script | Arguments | Purpose |
 |---|---|---|
-| `general-manager/docs/twin/sync-upstream.sh` (master; copy at `<twin>/twin/sync-upstream.sh`) | `[--check \| --init] [--allow-dirty] [--upstream-root DIR] [kind …]` (kinds `web`, `game-server`, `client`) | Makes a twin repo (card-backend web / game-server, batak-client) byte-identical to its Crossle upstream except the paths in `twin/<kind>.exclude`; `--check` = drift report, `--init` = first fill, lock in `twin/upstream.lock.md`. |
+| `general-manager/docs/twin/sync-upstream.sh` (master; copies at `card/card-backend/twin/` and `card/batak-client/twin/`) | `[--check \| --init] [--allow-dirty] [--upstream-root DIR] [kind …]` (kinds `web`, `game-server`, `client`) | Makes a twin repo (card-backend web / game-server, batak-client) byte-identical to its Crossle upstream except the paths in `twin/<kind>.exclude`; `--check` = drift report, `--init` = first fill, lock in `twin/upstream.lock.md`. |
 
 ## 6. Gates and misc (`general-manager/`, Flutter clients)
 
@@ -128,8 +126,10 @@ Kept for the Ubuntu/mini hosts; not used by the launchers above. Each `*_env.sh`
 
 | Tool | Arguments | Purpose |
 |---|---|---|
-| `dcm-manager/tools_v2/python/webgl-serve/serve.py` | `<build-folder> [port]` (default 8090) | Serves a Unity WebGL gzip build locally with the right `Content-Encoding` headers. |
+| `dcm-manager/tools/python/webgl-serve/serve.py` | `<build-folder> [port]` (default 8090) | Serves a Unity WebGL gzip build locally with the right `Content-Encoding` headers. |
 | `racer/racer-manager/implementations/new-cars/tools/decimate_fbx.py` | Blender: `-b --factory-startup -P decimate_fbx.py -- <in.fbx> <out.fbx> [split=a,b] [normals=1] [carve=…] [wheels=a,b]` | Mesh reduction of heavy car FBX files to a triangle target, node names kept. |
 | `racer/racer-manager/implementations/new-cars/tools/dump_fbx_textures.py` | Blender: `-b --factory-startup -P dump_fbx_textures.py -- <in.fbx> <out.txt>` | Lists which texture files an FBX's materials use. |
 | `unity command …` (Unity Pipeline CLI; project commands are `[CliCommand]`s in `dcm-client/Assets/DontCrossMe/Editor/Cli/`) | `unity command --detail compact [--query …]`, then `unity command <name>` | Runs Editor-side builders/validators live: `booster_{build_assets,build_test_scene,preview_hammer,validate}`, `heart_stats_{build,lobby,validate}`, `season_ui_{build,validate}`, `trophies_{build,validate}`. |
+| `unity --project-path <proj> command cardkit_{build,validate}` / `batak_{build,validate}` (`[CliCommand]`s in `dcm-client/Assets/GameComponents/CardKit/Editor/Cli/` and `card/batak-client/Assets/Batak/Editor/Cli/`) | none; batch: `Unity -batchmode -quit -projectPath card/batak-client -executeMethod Batak.Editor.Cli.BatakCli.BuildAll` | Builds the shared card UI prefabs (sprite set, CardView, SeatView, CardTableLayout) and batak-client's own content (Play page, end popup, Game + Lobby scenes, Addressables entries, build list); the validate twins check them. |
+| `general-manager/docs/twin/unity-csproj-regen.py` | `<project-root> [--exclude <Assets/sub>]… [--suffix NAME] [--check]` | Regenerates the Compile lists of the Unity-generated `Assembly-CSharp(.Editor).csproj` from disk so `dotnet build` works as a compile gate while the editor is open; `--exclude Assets/DontCrossMe --suffix twin` = the client-twin gate. |
 | `dcm-dict/scripts/{categorizer,export,golden,importer,kiki-extract,legacy,master-build,verify}/` | per folder | Python pipelines of the master dictionary DB (see dcm-dict docs). |
