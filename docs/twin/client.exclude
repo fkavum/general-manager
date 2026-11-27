@@ -1,7 +1,7 @@
 #@upstream=dcm-client
 #@dest=.
 # card-platform twin manifest (master: general-manager/docs/twin/client.exclude) — the per-app paths of a dcm-client twin
-# (one twin repo per store app: batak-client, pisti-client …). Everything not listed here is overwritten by
+# (one twin repo per store app: batak-client, basra-client …). Everything not listed here is overwritten by
 # twin/sync-upstream.sh. Never edit a synced path on a twin: change dcm-client and re-sync. A twin-only file must live
 # under one of these paths. rsync patterns, anchored at the dcm-client root. Folder lines need their .meta twin.
 # Drafted before P1c (client AppCore extraction); P1c finalises the Addressables and Editor lines.
@@ -9,13 +9,13 @@
 # the game folder: Crossle's is not copied; add the twin's own below it (never deleted)
 /Assets/DontCrossMe
 /Assets/DontCrossMe.meta
-# twin game folder — the twin writes its own lines, e.g. batak-client /Assets/Batak, pisti-client /Assets/Pisti (+ .meta):
+# twin game folder — the twin writes its own lines, e.g. batak-client /Assets/Batak, basra-client /Assets/Basra (+ .meta):
 #/Assets/<Game>
 #/Assets/<Game>.meta
 
 # the twin's own socket DTOs, exported by its game server (card-backend/game-server/Tools/generate-socket-shared.sh
 # --game=<G> --client-dir=…): SocketShared/Game/<G> is not in dcm-client, so it must be protected from --delete — the twin
-# writes its own lines (batak-client Game/Batak, pisti-client Game/Pisti, + .meta)
+# writes its own lines (batak-client Game/Batak, basra-client Game/Basra, + .meta)
 #/Assets/SharedData/SocketShared/Game/<G>
 #/Assets/SharedData/SocketShared/Game/<G>.meta
 
@@ -23,6 +23,21 @@
 # a twin ships its own files with the same GUIDs (card-platform P1c, dcm-client Docs/AI_RULES.md)
 /Assets/AppData
 /Assets/AppData.meta
+
+# per-game art swap (2026-11-26): the twin's copy of these images carries the upstream GUID (heart icons in
+# Assets/GameComponents/Heart/Sprites/, splash in Assets/AppData/Art/), so the shared copy must not exist in the twin —
+# two files with one GUID make Unity give the shared copy a new GUID, which --check reports as drift
+/Assets/GameComponents/Core/Sprites/Icon/ui_icon_heart.png
+/Assets/GameComponents/Core/Sprites/Icon/ui_icon_heart.png.meta
+/Assets/GameComponents/Core/Sprites/Icon/ui_icon_heart_broken.png
+/Assets/GameComponents/Core/Sprites/Icon/ui_icon_heart_broken.png.meta
+/Assets/GameComponents/Core/Sprites/Icon/ui_icon_heart_unlimited.png
+/Assets/GameComponents/Core/Sprites/Icon/ui_icon_heart_unlimited.png.meta
+/Assets/GameComponents/Core/Sprites/Splash/splash.png
+/Assets/GameComponents/Core/Sprites/Splash/splash.png.meta
+# the twin's heart icons (same GUIDs as dcm-client's Core/Sprites/Icon copies). dcm-client's Heart/Sprites holds only an
+# Editor~ folder; the folder's .meta stays synced, its contents are the twin's own
+/Assets/GameComponents/Heart/Sprites/*
 
 # app identity, servers, store catalog, build stamp
 /Assets/Resources/AppConfig*.json

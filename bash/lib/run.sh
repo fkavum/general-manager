@@ -127,6 +127,9 @@ gm_write_env PROJECT INFRA_DIR INFRA_ENV_FILE INFRA_LABEL GM_APP_ENV
 # ---------------------------------------------------------------- panes ----
 # No -p anywhere: each stack keeps the project name compose derives from its own
 # folder, so these panes drive the same containers as running compose by hand.
+# COMPOSE_MENU=false: attached 'up' in a TTY otherwise starts compose's [w]/[d]/[v]
+# shortcut menu, whose keyboard reader can spin at 100%+ CPU per pane. The env var
+# (not --menu=false) so an older compose without the flag still runs.
 INFRA_TITLE=""
 for i in "${!WAIT_NAMES[@]}"; do
   [ -n "$INFRA_TITLE" ] && INFRA_TITLE="$INFRA_TITLE, "
@@ -137,7 +140,7 @@ done
 if [ "$WITH_INFRA" = 1 ]; then
   gm_add_pane infra "infra · $INFRA_TITLE" \
 "cd $(gm_sq "$INFRA_DIR")
-docker compose --env-file \"\$INFRA_ENV_FILE\" up"
+COMPOSE_MENU=false docker compose --env-file \"\$INFRA_ENV_FILE\" up"
 fi
 
 DOTNET_CMD="dotnet run"
@@ -161,7 +164,7 @@ for i in "${PICKED[@]}"; do
     svc_env="${SVC_ENV[$i]:-$GM_APP_ENV}"
     if [ "$svc_env" = "-" ]; then env_arg=""; else env_arg="--env-file $(gm_sq "$svc_env")"; fi
     body="cd $(gm_sq "${SVC_DOCKER[$i]}")
-docker compose $env_arg up $BUILD"
+COMPOSE_MENU=false docker compose $env_arg up $BUILD"
     title="$name · :${SVC_PORTS[$i]} (docker)"
   elif [ "${SVC_KIND[$i]}" = flutter-web ]; then
     # the dev server binds the declared port; the API URL comes from the env file

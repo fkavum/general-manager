@@ -24,7 +24,7 @@ trap ':' INT
 printf "\033]0;%s\007" 'infra · mysql 20010'
 echo "───── infra · mysql 20010 ─────"
 cd '<ROOT>/infra'
-docker compose --env-file "$INFRA_ENV_FILE" up
+COMPOSE_MENU=false docker compose --env-file "$INFRA_ENV_FILE" up
 __st=$?
 echo
 echo "[infra] stopped (status $__st) · ↑ re-runs it · exit closes the pane"

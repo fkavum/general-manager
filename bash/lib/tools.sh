@@ -603,9 +603,28 @@ _gm_wezterm_mux_up() { # <wezterm bin>
 # square when cols == 2*rows; sizes are read from the real window, not assumed.
 # Four panes come out as the 2x2 grid; a fifth or sixth stays readable instead of
 # being stacked into a 2-row sliver.
+# A relaunch replaces the previous run's window instead of stacking another one
+# beside it: old panes would keep their compose/dotnet processes (and ports)
+# alive. Ids come from .run/wezterm-panes; a pane is closed only if its title is
+# still the one we gave it, so a recycled id after a WezTerm restart is left alone.
+_gm_wezterm_close_previous() { # <wezterm bin>
+  local wez="$1" file="$RUN_DIR/wezterm-panes" id title now closed=0
+  [ -f "$file" ] || return 0
+  local listing; listing="$("$wez" cli list 2>/dev/null)" || return 0
+  while IFS=$'\t' read -r id title; do
+    [ -n "$id" ] || continue
+    now="$(printf '%s\n' "$listing" | awk -v id="$id" '$3==id { $1=$2=$3=$4=$5=""; sub(/^ +/, ""); print }')"
+    case "$now" in "$(printf '%s' "$title" | tr -s ' ')"*) ;; *) continue ;; esac
+    "$wez" cli kill-pane --pane-id "$id" >/dev/null 2>&1 && closed=$((closed + 1))
+  done < "$file"
+  rm -f "$file"
+  [ "$closed" -eq 0 ] || gm_info "closed $closed pane(s) left from the previous run"
+}
+
 _gm_launch_wezterm() {
   local wez; wez="$(gm_find_wezterm)" || { GM_LAUNCH_WHY="wezterm not found"; return 1; }
   _gm_wezterm_mux_up "$wez" || { GM_LAUNCH_WHY="WezTerm mux did not come up"; gm_warn "$GM_LAUNCH_WHY"; return 1; }
+  _gm_wezterm_close_previous "$wez"
 
   local ids=() w=() h=() i best bi dir pid
   for i in "${!PANE_FILES[@]}"; do
@@ -640,6 +659,7 @@ _gm_launch_wezterm() {
 
   "$wez" cli activate-pane --pane-id "${ids[0]}" >/dev/null 2>&1 || true
   GM_PANE_IDS="${ids[*]}"   # so callers (tools/test.sh) can inspect or close them
+  for i in "${!ids[@]}"; do printf '%s\t%s\n' "${ids[$i]}" "${PANE_TITLES[$i]}"; done > "$RUN_DIR/wezterm-panes"
   GM_WEZTERM_BIN="$wez"
   gm_info "launched ${#PANE_FILES[@]} panes in WezTerm (pane ids: ${ids[*]})"
 }
